@@ -1,17 +1,9 @@
 import Link from "next/link";
-import { connectDB } from "@/lib/db";
-import { TeacherModel } from "@/lib/models";
 import { getRequestContext } from "@/lib/auth/context";
 import StudentForm from "@/components/admin/StudentForm";
 
 export default async function NewStudentPage() {
   await getRequestContext();
-  await connectDB();
-  const teachers = await TeacherModel.find().sort({ teacherCode: 1 }).lean();
-  const list = teachers.map((t) => ({
-    _id: String(t._id),
-    name: t.name,
-  }));
 
   return (
     <div>
@@ -29,7 +21,7 @@ export default async function NewStudentPage() {
         view their own reports.
       </p>
       <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
-        <StudentForm teachers={list} />
+        <StudentForm />
       </div>
     </div>
   );

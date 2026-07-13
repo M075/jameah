@@ -4,9 +4,8 @@ import {
   StudentModel,
   ReportModel,
   TermModel,
-  type TemplateKey,
+  SubjectModel,
 } from "@/lib/models";
-import { reportRegistry } from "@/lib/reports";
 import { getRequestContext } from "@/lib/auth/context";
 
 export default async function StudentDashboard() {
@@ -46,6 +45,7 @@ export default async function StudentDashboard() {
 
   const reports = await ReportModel.find({ student: student._id })
     .populate({ path: "term", model: TermModel })
+    .populate({ path: "subject", model: SubjectModel })
     .sort({ createdAt: -1 })
     .lean();
 
@@ -59,7 +59,7 @@ export default async function StudentDashboard() {
       <div className="mt-6 space-y-3">
         {reports.map((r) => {
           const term = r.term as unknown as { name: string; academicYear: string };
-          const tpl = reportRegistry[r.template as TemplateKey];
+          const subject = r.subject as unknown as { name: string };
           const isPublished = r.status === "published";
           return (
             <Link
@@ -69,7 +69,7 @@ export default async function StudentDashboard() {
             >
               <div>
                 <div className="font-medium text-emerald-800">
-                  {tpl?.label ?? r.template}
+                  {subject?.name ?? "Report"}
                 </div>
                 <div className="text-xs text-gray-500">
                   {term?.name} {term?.academicYear}

@@ -1,7 +1,8 @@
 /**
  * Idempotent seed script. Run with:  npx tsx scripts/seed.ts
- * (or `npm run seed`). Creates an admin, teachers, students, a term, and a
- * few sample reports so the app is usable immediately after a fresh DB.
+ * (or `npm run seed`). Creates an admin, teachers, students, subjects,
+ * a term, and a few sample per-subject reports so the app is usable
+ * immediately after a fresh DB.
  *
  * Uses relative imports so it runs under `tsx` without path-alias resolution.
  */
@@ -13,10 +14,12 @@ import {
   TeacherModel,
   StudentModel,
   TermModel,
+  SubjectModel,
   ReportModel,
+  PROGRAMMES,
   type Role,
+  type ProgrammeKey,
 } from "../lib/models";
-import { reportTemplates, getFields, type ReportData } from "../lib/reports";
 
 const DEFAULT_PASSWORD = "Password123!";
 
@@ -42,30 +45,64 @@ async function main() {
   );
   console.log(`Term: ${term.name} ${term.academicYear}`);
 
+  // --- Subjects ------------------------------------------------------------
+  const subjectDefs: [string, ProgrammeKey][] = [
+    ["Memorisation", "hifz"],
+    ["Tajweed", "hifz"],
+    ["Revision", "hifz"],
+    ["Quran", "aalim"],
+    ["Arabic", "aalim"],
+    ["Fiqh", "aalim"],
+    ["Aqeedah", "aalim"],
+    ["Hadith", "aalim"],
+    ["Seerah", "aalim"],
+  ];
+  const subjectIds: Record<string, string> = {};
+  for (const [name, type] of subjectDefs) {
+    const s = await SubjectModel.findOneAndUpdate(
+      { name },
+      { name, type },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+    subjectIds[name] = String(s._id);
+  }
+  const hifzSubjectIds = subjectDefs
+    .filter(([, t]) => t === "hifz")
+    .map(([n]) => subjectIds[n]);
+  const aalimSubjectIds = subjectDefs
+    .filter(([, t]) => t === "aalim")
+    .map(([n]) => subjectIds[n]);
+  console.log(`Subjects: ${subjectDefs.length} created`);
+
   // --- Teachers -----------------------------------------------------------
-  const teacherDefs = [
+  const teacherDefs: {
+    name: string;
+    email: string;
+    type: ProgrammeKey;
+    subjects: string[];
+  }[] = [
     {
-      teacherCode: "T-HIFZ-01",
       name: "Ustadh Abdur Rahman",
       email: "hifz@jameah.edu",
-      subjects: ["hifz", "islamic"],
+      type: "hifz",
+      subjects: hifzSubjectIds,
     },
     {
-      teacherCode: "T-ISL-01",
       name: "Ustadha Fatima",
       email: "islamic@jameah.edu",
-      subjects: ["islamic"],
+      type: "aalim",
+      subjects: aalimSubjectIds,
     },
   ];
 
   const teacherIds: Record<string, string> = {};
   for (const t of teacherDefs) {
     const teacher = await TeacherModel.findOneAndUpdate(
-      { teacherCode: t.teacherCode },
-      { teacherCode: t.teacherCode, name: t.name, subjects: t.subjects },
+      { name: t.name },
+      { name: t.name, type: t.type, subjects: t.subjects },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
-    teacherIds[t.teacherCode] = teacher._id.toString();
+    teacherIds[t.email] = String(teacher._id);
 
     const pw = await hash(DEFAULT_PASSWORD);
     const teacherUser = await UserModel.findOneAndUpdate(
@@ -80,7 +117,6 @@ async function main() {
       },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
-    // Link back: set the profile's userId so dashboards can find it.
     await TeacherModel.findByIdAndUpdate(teacher._id, {
       userId: teacherUser._id,
     });
@@ -104,36 +140,48 @@ async function main() {
   console.log("Admin login: admin@jameah.edu");
 
   // --- Students -----------------------------------------------------------
-  // [code, name, grade, assignedTeacherCode, withLogin]
+  // [code, name, grade, programme, teacherEmail, withLogin]
   const studentDefs: [
     string,
     string,
     string,
+    ProgrammeKey,
     string,
     boolean,
   ][] = [
-    ["S-001", "Yusuf Khan", "Hifz Year 1", "T-HIFZ-01", true],
-    ["S-002", "Maryam Ali", "Hifz Year 1", "T-HIFZ-01", false],
-    ["S-003", "Ibrahim Hassan", "Hifz Year 2", "T-HIFZ-01", false],
-    ["S-004", "Aisha Rahman", "Alim Year 1", "T-ISL-01", true],
-    ["S-005", "Omar Farooq", "Alim Year 1", "T-ISL-01", false],
-    ["S-006", "Fatima Noor", "Alim Year 2", "T-ISL-01", false],
+    ["S-001", "Yusuf Khan", "Hifz Year 1", "hifz", "hifz@jameah.edu", true],
+    ["S-002", "Maryam Ali", "Hifz Year 1", "hifz", "hifz@jameah.edu", false],
+    ["S-003", "Ibrahim Hassan", "Hifz Year 2", "hifz", "hifz@jameah.edu", false],
+    ["S-004", "Aisha Rahman", "Alim Year 1", "aalim", "islamic@jameah.edu", true],
+    ["S-005", "Omar Farooq", "Alim Year 1", "aalim", "islamic@jameah.edu", false],
+    ["S-006", "Fatima Noor", "Alim Year 2", "aalim", "islamic@jameah.edu", false],
   ];
 
   const studentIds: Record<string, string> = {};
-  for (const [code, name, grade, tCode, withLogin] of studentDefs) {
+  const studentSubjects: Record<string, { subject: string; teacher: string }[]> = {};
+  for (const [code, name, grade, programme, tEmail, withLogin] of studentDefs) {
+    const subjectIdsForProgramme =
+      programme === "hifz" ? hifzSubjectIds : aalimSubjectIds;
+    const teacherId = teacherIds[tEmail];
+    const subjects = subjectIdsForProgramme.map((sid) => ({
+      subject: sid,
+      teacher: teacherId,
+    }));
+    studentSubjects[code] = subjects;
+
     const student = await StudentModel.findOneAndUpdate(
       { studentCode: code },
       {
         studentCode: code,
         name,
         grade,
-        teacher: teacherIds[tCode],
+        programme,
+        subjects,
         active: true,
       },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
-    studentIds[code] = student._id.toString();
+    studentIds[code] = String(student._id);
 
     if (withLogin) {
       const email = `${code.toLowerCase()}@jameah.edu`;
@@ -150,7 +198,6 @@ async function main() {
         },
         { upsert: true, new: true, setDefaultsOnInsert: true },
       );
-      // Link back: set the profile's userId so dashboards can find it.
       await StudentModel.findByIdAndUpdate(student._id, {
         userId: studentUser._id,
       });
@@ -160,44 +207,32 @@ async function main() {
     }
   }
 
-  // --- Sample reports -----------------------------------------------------
-  // Give the two students with logins a published report so the student view
-  // and PDF download are testable immediately.
-  const sampleStudents = ["S-001", "S-004"];
-  for (const code of sampleStudents) {
-    const templateKey = code === "S-001" ? "hifz" : "islamic";
-    const template = reportTemplates.find((t) => t.key === templateKey)!;
-    const data: ReportData = {};
-    for (const f of getFields(template)) {
-      if (f.type === "score") {
-        const max = f.max ?? 100;
-        data[f.id] = Math.round(max * 0.82);
-      } else if (f.type === "grade") {
-        data[f.id] = "good";
-      } else {
-        data[f.id] = "A consistent and diligent student. Keep up the good work.";
-      }
+  // --- Sample per-subject reports ------------------------------------------
+  // Give the two students with logins a published report for every subject.
+  for (const code of ["S-001", "S-004"]) {
+    const studentId = studentIds[code];
+    for (const entry of studentSubjects[code]) {
+      const data = {
+        [`${entry.subject}__mark`]: Math.round(82 + Math.random() * 12),
+        [`${entry.subject}__conduct`]: "good",
+        remarks: "A consistent and diligent student. Keep up the good work.",
+      };
+      await ReportModel.findOneAndUpdate(
+        { student: studentId, term: term._id, subject: entry.subject },
+        {
+          student: studentId,
+          term: term._id,
+          subject: entry.subject,
+          teacher: entry.teacher,
+          status: "published",
+          data,
+          comments: data.remarks as string,
+          publishedAt: new Date(),
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
     }
-
-    await ReportModel.findOneAndUpdate(
-      {
-        student: studentIds[code],
-        term: term._id,
-        template: templateKey,
-      },
-      {
-        student: studentIds[code],
-        term: term._id,
-        template: templateKey,
-        teacher: teacherIds[code === "S-001" ? "T-HIFZ-01" : "T-ISL-01"],
-        status: "published",
-        data,
-        comments: data.remarks as string,
-        publishedAt: new Date(),
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
-    );
-    console.log(`Sample report (published): ${code} / ${template.label}`);
+    console.log(`Sample reports (published): ${code} — all subjects`);
   }
 
   console.log("\nSeed complete.");

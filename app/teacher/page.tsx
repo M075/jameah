@@ -7,9 +7,8 @@ export default async function TeacherDashboard() {
   const { teacher, isAdmin } = await getRequestContext();
   await connectDB();
 
-  const filter = isAdmin || !teacher ? {} : { teacher: teacher._id };
+  const filter = isAdmin || !teacher ? {} : { "subjects.teacher": teacher._id };
   const students = await StudentModel.find(filter)
-    .populate("teacher")
     .sort({ studentCode: 1 })
     .lean();
 

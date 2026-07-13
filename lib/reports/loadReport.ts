@@ -4,29 +4,38 @@ import {
   StudentModel,
   TermModel,
   TeacherModel,
+  SubjectModel,
   type ReportType,
   type StudentType,
   type TermType,
   type TeacherType,
-  type TemplateKey,
+  type SubjectType,
+  type ProgrammeKey,
 } from "@/lib/models";
-import { getTemplate, computeResult, type ReportData, type ReportResult, type ReportTemplate } from "@/lib/reports";
+import {
+  buildReportTemplate,
+  computeResult,
+  type ReportData,
+  type ReportResult,
+  type ReportTemplate,
+} from "@/lib/reports";
 
 export interface ReportContext {
   report: ReportType;
   student: StudentType | null;
   term: TermType | null;
   teacher: TeacherType | null;
-  templateKey: TemplateKey;
+  subject: SubjectType | null;
+  programme: ProgrammeKey;
   template: ReportTemplate;
   result: ReportResult;
   data: ReportData;
 }
 
 /**
- * Load a report together with its student, term, and teacher, plus the derived
- * template and computed result. Shared by the HTML view and the PDF route so
- * both render from one source of truth.
+ * Load a report together with its student, term, teacher, and subject, plus the
+ * derived template and computed result. Shared by the HTML view and the PDF
+ * route so both render from one source of truth.
  */
 export async function loadReportContext(
   reportId: string,
@@ -35,16 +44,29 @@ export async function loadReportContext(
   const report = await ReportModel.findById(reportId).lean<ReportType>();
   if (!report) return null;
 
-  const [student, term, teacher] = await Promise.all([
+  const [student, term, teacher, subject] = await Promise.all([
     StudentModel.findById(report.student).lean<StudentType>(),
     TermModel.findById(report.term).lean<TermType>(),
     TeacherModel.findById(report.teacher).lean<TeacherType>(),
+    SubjectModel.findById(report.subject).lean<SubjectType>(),
   ]);
 
-  const templateKey = report.template as TemplateKey;
-  const template = getTemplate(templateKey);
+  const programme = (subject?.type ?? "hifz") as ProgrammeKey;
+  const template = buildReportTemplate(programme, [
+    { id: String(report.subject), name: subject?.name ?? "Subject" },
+  ]);
   const data = (report.data ?? {}) as ReportData;
   const result = computeResult(template, data);
 
-  return { report, student, term, teacher, templateKey, template, result, data };
+  return {
+    report,
+    student,
+    term,
+    teacher,
+    subject,
+    programme,
+    template,
+    result,
+    data,
+  };
 }

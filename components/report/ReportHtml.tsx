@@ -14,16 +14,18 @@ function displayValue(field: ReportField, value: unknown): string {
 }
 
 export default function ReportHtml({ ctx }: { ctx: ReportContext }) {
-  const { report, student, term, teacher, template, result, data } = ctx;
+  const { report, student, term, teacher, subject, template, result, data } =
+    ctx;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-8 print:border-0 print:p-0">
       <header className="border-b border-gray-200 pb-4">
         <h1 className="text-2xl font-bold text-emerald-900">
-          Jameah · Islamic Institute
+          Jameah Mahmoodiyah Progress Report
         </h1>
         <p className="text-sm text-gray-500">
-          {template.label} — {term?.name} {term?.academicYear}
+          {subject?.name ?? template.label} — {term?.name}{" "}
+          {term?.academicYear}
         </p>
       </header>
 
@@ -32,10 +34,7 @@ export default function ReportHtml({ ctx }: { ctx: ReportContext }) {
           <dt className="text-gray-400">Student</dt>
           <dd className="font-medium text-gray-800">{student?.name}</dd>
         </div>
-        <div>
-          <dt className="text-gray-400">Code</dt>
-          <dd className="font-medium text-gray-800">{student?.studentCode}</dd>
-        </div>
+        
         <div>
           <dt className="text-gray-400">Grade</dt>
           <dd className="font-medium text-gray-800">{student?.grade}</dd>
@@ -44,10 +43,7 @@ export default function ReportHtml({ ctx }: { ctx: ReportContext }) {
           <dt className="text-gray-400">Teacher</dt>
           <dd className="font-medium text-gray-800">{teacher?.name}</dd>
         </div>
-        <div>
-          <dt className="text-gray-400">Status</dt>
-          <dd className="font-medium text-gray-800">{report.status}</dd>
-        </div>
+        
       </dl>
 
       {/* Overall summary */}

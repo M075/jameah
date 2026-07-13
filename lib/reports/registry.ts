@@ -1,4 +1,3 @@
-import type { TemplateKey } from "@/lib/models";
 import type {
   ReportData,
   ReportField,
@@ -8,24 +7,6 @@ import type {
   SectionResult,
 } from "./types";
 import { gradeOption } from "./gradeScale";
-import { hifzTemplate } from "./templates/hifz";
-import { islamicTemplate } from "./templates/islamic";
-
-/** All available report templates keyed by their template key. */
-export const reportRegistry: Record<TemplateKey, ReportTemplate> = {
-  hifz: hifzTemplate,
-  islamic: islamicTemplate,
-};
-
-/** List of templates (for dropdowns / iteration). */
-export const reportTemplates: ReportTemplate[] = Object.values(reportRegistry);
-
-/** Get a template definition by key. Throws on unknown key. */
-export function getTemplate(key: TemplateKey): ReportTemplate {
-  const t = reportRegistry[key];
-  if (!t) throw new Error(`Unknown report template: ${String(key)}`);
-  return t;
-}
 
 /** All fields across all sections of a template, in order. */
 export function getFields(template: ReportTemplate): ReportField[] {

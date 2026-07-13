@@ -1,4 +1,4 @@
-import type { TemplateKey } from "@/lib/models";
+import type { ProgrammeKey } from "@/lib/models";
 
 /**
  * A single selectable option for a "grade" field. Each option carries its own
@@ -36,7 +36,7 @@ export interface ReportSection {
 }
 
 export interface ReportTemplate {
-  key: TemplateKey;
+  key: ProgrammeKey;
   label: string;
   description: string;
   sections: ReportSection[];

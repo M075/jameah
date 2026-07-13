@@ -68,7 +68,8 @@ const styles = StyleSheet.create({
 });
 
 export default function ReportPdf({ ctx }: { ctx: ReportContext }) {
-  const { report, student, term, teacher, template, result, data } = ctx;
+  const { report, student, term, teacher, subject, template, result, data } =
+    ctx;
 
   return (
     <Document>
@@ -76,7 +77,8 @@ export default function ReportPdf({ ctx }: { ctx: ReportContext }) {
         <View style={styles.header}>
           <Text style={styles.title}>Jameah · Islamic Institute</Text>
           <Text style={styles.subtitle}>
-            {template.label} — {term?.name} {term?.academicYear}
+            {subject?.name ?? template.label} — {term?.name}{" "}
+            {term?.academicYear}
           </Text>
         </View>
 

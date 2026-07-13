@@ -1,45 +1,101 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { createTeacher, type AdminActionState } from "@/app/admin/actions";
+import {
+  createTeacher,
+  updateTeacher,
+  type AdminActionState,
+} from "@/app/admin/actions";
 
 const field =
   "w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900";
 const label = "block text-sm font-medium text-gray-700";
 
-export default function TeacherForm() {
+export interface SubjectOption {
+  _id: string;
+  name: string;
+  type: "hifz" | "aalim";
+}
+
+export default function TeacherForm({
+  id,
+  name = "",
+  type: initialType = "hifz",
+  assigned = [],
+  subjects,
+}: {
+  id?: string;
+  name?: string;
+  type?: "hifz" | "aalim";
+  assigned?: string[];
+  subjects: SubjectOption[];
+}) {
+  const action = id ? updateTeacher : createTeacher;
   const [state, formAction, pending] = useActionState<
     AdminActionState,
     FormData
-  >(createTeacher, {});
+  >(action, {});
+  const [type, setType] = useState<"hifz" | "aalim">(initialType);
   const [createLogin, setCreateLogin] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  const visibleSubjects = subjects.filter((s) => s.type === type);
+
   return (
     <form action={formAction} className="max-w-lg space-y-4">
-      <div>
-        <label className={label}>
-          Teacher code <span className="text-red-500">*</span>
-        </label>
-        <input name="teacherCode" required className={field} placeholder="T-ISL-02" />
-      </div>
+      {id ? <input type="hidden" name="teacherId" value={id} /> : null}
 
       <div>
         <label className={label}>
           Name <span className="text-red-500">*</span>
         </label>
-        <input name="name" required className={field} placeholder="Full name" />
+        <input
+          name="name"
+          required
+          defaultValue={name}
+          className={field}
+          placeholder="Full name"
+        />
+      </div>
+
+      <div>
+        <label className={label}>
+          Type <span className="text-red-500">*</span>
+        </label>
+        <select
+          name="type"
+          value={type}
+          onChange={(e) => setType(e.target.value as "hifz" | "aalim")}
+          className={field}
+        >
+          <option value="hifz">Hifz</option>
+          <option value="aalim">Aalim</option>
+        </select>
       </div>
 
       <div>
         <label className={label}>Subjects</label>
-        <div className="flex gap-4 pt-1">
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" name="subjects" value="hifz" /> Hifz
-          </label>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" name="subjects" value="islamic" /> Aalim
-          </label>
+        <div className="mt-1 space-y-1">
+          {visibleSubjects.length === 0 ? (
+            <p className="text-xs text-gray-400">
+              No {type} subjects yet. Add them from the Subjects page.
+            </p>
+          ) : (
+            visibleSubjects.map((s) => (
+              <label
+                key={s._id}
+                className="flex items-center gap-2 text-sm text-gray-700"
+              >
+                <input
+                  type="checkbox"
+                  name="subjects"
+                  value={s._id}
+                  defaultChecked={assigned.includes(s._id)}
+                />
+                {s.name}
+              </label>
+            ))
+          )}
         </div>
       </div>
 
@@ -137,7 +193,7 @@ export default function TeacherForm() {
         disabled={pending}
         className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-60"
       >
-        {pending ? "Saving…" : "Add teacher"}
+        {pending ? "Saving…" : id ? "Save changes" : "Add teacher"}
       </button>
     </form>
   );

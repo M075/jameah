@@ -4,16 +4,18 @@ import {
   ReportModel,
   StudentModel,
   TermModel,
-  TeacherModel,
+  SubjectModel,
   type ReportType,
   type StudentType,
   type TermType,
-  type TeacherType,
+  type SubjectType,
 } from "@/lib/models";
 import {
-  reportTemplates,
-  getFields,
+  buildReportTemplate,
+  markFieldId,
+  conductFieldId,
   computeResult,
+  gradeOption,
   type ReportData,
 } from "@/lib/reports";
 
@@ -23,62 +25,76 @@ const FIXED_COLUMNS = [
   "grade",
   "term",
   "academicYear",
-  "template",
+  "subject",
   "status",
+  "mark",
+  "conduct",
   "overallPercent",
   "gradeLetter",
   "publishedAt",
+  "remarks",
 ] as const;
 
 /**
- * Build a flattened CSV of every report. Fixed columns come first, followed by
- * one column per report-field id (union across all templates), then remarks.
- * Returns the CSV as a string so both the CLI script and the admin API route
- * can use it.
+ * Build a flattened CSV of every report. With one report per student + term +
+ * subject, each row is one subject. Returns the CSV as a string so both the
+ * CLI script and the admin API route can use it.
  */
 export async function buildReportsCsv(): Promise<string> {
   await connectDB();
 
-  const [reports, students, terms, teachers] = await Promise.all([
+  const [reports, students, terms, subjects] = await Promise.all([
     ReportModel.find().sort({ createdAt: -1 }).lean<ReportType[]>(),
     StudentModel.find().lean<StudentType[]>(),
     TermModel.find().lean<TermType[]>(),
-    TeacherModel.find().lean<TeacherType[]>(),
+    SubjectModel.find().lean<SubjectType[]>(),
   ]);
 
   const studentMap = new Map(students.map((s) => [String(s._id), s]));
   const termMap = new Map(terms.map((t) => [String(t._id), t]));
-
-  // Union of all template field ids, in declaration order.
-  const fieldIds = Array.from(
-    new Set(reportTemplates.flatMap((t) => getFields(t).map((f) => f.id))),
-  );
-
-  const header = [...FIXED_COLUMNS, ...fieldIds, "remarks"];
+  const subjectMap = new Map(subjects.map((s) => [String(s._id), s]));
 
   const rows = reports.map((r) => {
     const student = studentMap.get(String(r.student));
     const term = termMap.get(String(r.term));
-    const template = reportTemplates.find((t) => t.key === r.template)!;
-    const result = computeResult(template, (r.data ?? {}) as ReportData);
+    const subject = subjectMap.get(String(r.subject));
     const data = (r.data ?? {}) as Record<string, string | number>;
 
-    const row: Record<string, string | number> = {
+    let mark = "";
+    let conduct = "";
+    let overall = "";
+    let gradeLetter = "";
+    if (subject) {
+      const template = buildReportTemplate(subject.type, [
+        { id: String(subject._id), name: subject.name },
+      ]);
+      const result = computeResult(template, data as ReportData);
+      const markId = markFieldId(String(subject._id));
+      const conductId = conductFieldId(String(subject._id));
+      mark = String(data[markId] ?? "");
+      const conductVal = String(data[conductId] ?? "");
+      conduct = gradeOption(conductVal)?.label ?? conductVal;
+      overall = String(result.percent ?? "");
+      gradeLetter = result.grade;
+    }
+
+    return {
       studentCode: student?.studentCode ?? "",
       studentName: student?.name ?? "",
       grade: student?.grade ?? "",
       term: term?.name ?? "",
       academicYear: term?.academicYear ?? "",
-      template: r.template,
+      subject: subject?.name ?? "",
       status: r.status,
-      overallPercent: result.percent ?? "",
-      gradeLetter: result.grade,
+      mark,
+      conduct,
+      overallPercent: overall,
+      gradeLetter,
       publishedAt: r.publishedAt ? new Date(r.publishedAt).toISOString() : "",
+      remarks:
+        typeof r.comments === "string" && r.comments ? r.comments : "",
     };
-    for (const id of fieldIds) row[id] = data[id] ?? "";
-    row.remarks = typeof data.remarks === "string" ? data.remarks : "";
-    return row;
   });
 
-  return stringify(rows, { header: true, columns: header });
+  return stringify(rows, { header: true, columns: FIXED_COLUMNS });
 }

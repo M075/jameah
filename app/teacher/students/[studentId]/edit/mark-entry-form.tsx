@@ -9,6 +9,7 @@ interface Props {
   initialData: ReportData;
   studentId: string;
   termId: string;
+  subjectId: string;
 }
 
 export default function MarkEntryForm({
@@ -16,6 +17,7 @@ export default function MarkEntryForm({
   initialData,
   studentId,
   termId,
+  subjectId,
 }: Props) {
   const [data, setData] = useState<ReportData>(initialData ?? {});
   const [pending, setPending] = useState(false);
@@ -35,7 +37,7 @@ export default function MarkEntryForm({
       const res = await saveReport({
         studentId,
         termId,
-        template: template.key,
+        subjectId,
         status,
         data,
       });

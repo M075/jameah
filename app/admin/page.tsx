@@ -4,6 +4,7 @@ import {
   StudentModel,
   TeacherModel,
   TermModel,
+  SubjectModel,
   ReportModel,
 } from "@/lib/models";
 import { getRequestContext } from "@/lib/auth/context";
@@ -12,20 +13,18 @@ export default async function AdminDashboard() {
   await getRequestContext(); // enforces auth (proxy also guards /admin)
   await connectDB();
 
-  const [students, teachers, terms, published, drafts] = await Promise.all([
+  const [students, teachers, subjects, reports] = await Promise.all([
     StudentModel.countDocuments(),
     TeacherModel.countDocuments(),
-    TermModel.countDocuments(),
-    ReportModel.countDocuments({ status: "published" }),
-    ReportModel.countDocuments({ status: "draft" }),
+    SubjectModel.countDocuments(),
+    ReportModel.countDocuments(),
   ]);
 
   const stats = [
     { label: "Students", value: students, href: "/admin/students" },
     { label: "Teachers", value: teachers, href: "/admin/teachers" },
-    { label: "Terms", value: terms, href: "/admin/students" },
-    { label: "Published reports", value: published, href: "/admin/backup" },
-    { label: "Draft reports", value: drafts, href: "/admin/backup" },
+    { label: "Subjects", value: subjects, href: "/admin/subjects" },
+    { label: "Reports", value: reports, href: "/admin/reports" },
   ];
 
   return (

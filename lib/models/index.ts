@@ -9,9 +9,13 @@ export { TeacherModel, type TeacherType } from "./Teacher";
 export { TermModel, type TermType } from "./Term";
 export {
   ReportModel,
-  TEMPLATES,
   REPORT_STATUSES,
-  type TemplateKey,
   type ReportStatus,
   type ReportType,
 } from "./Report";
+export {
+  SubjectModel,
+  PROGRAMMES,
+  type SubjectType,
+  type ProgrammeKey,
+} from "./Subject";

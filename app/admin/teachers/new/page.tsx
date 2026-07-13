@@ -1,9 +1,13 @@
 import Link from "next/link";
+import { connectDB } from "@/lib/db";
+import { SubjectModel, type SubjectType } from "@/lib/models";
 import { getRequestContext } from "@/lib/auth/context";
 import TeacherForm from "@/components/admin/TeacherForm";
 
 export default async function NewTeacherPage() {
   await getRequestContext();
+  await connectDB();
+  const subjects = await SubjectModel.find().sort({ name: 1 }).lean();
 
   return (
     <div>
@@ -17,11 +21,17 @@ export default async function NewTeacherPage() {
         Add teacher
       </h1>
       <p className="mt-1 text-sm text-gray-600">
-        Create a teacher profile. Optionally generate a login so the teacher can
-        enter marks.
+        A teacher is either Hifz or Aalim, then assigned to the subjects they
+        teach.
       </p>
       <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
-        <TeacherForm />
+        <TeacherForm
+          subjects={(subjects as SubjectType[]).map((s) => ({
+            _id: String(s._id),
+            name: s.name,
+            type: s.type,
+          }))}
+        />
       </div>
     </div>
   );

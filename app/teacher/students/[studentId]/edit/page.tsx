@@ -1,8 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connectDB } from "@/lib/db";
-import { StudentModel, TermModel, ReportModel, type TemplateKey } from "@/lib/models";
-import { getTemplate, type ReportData } from "@/lib/reports";
+import {
+  StudentModel,
+  TermModel,
+  ReportModel,
+  SubjectModel,
+  type StudentType,
+} from "@/lib/models";
+import { buildReportTemplate, type ReportData } from "@/lib/reports";
 import { getRequestContext } from "@/lib/auth/context";
 import MarkEntryForm from "./mark-entry-form";
 
@@ -11,34 +17,41 @@ export default async function EditReportPage({
   searchParams,
 }: {
   params: Promise<{ studentId: string }>;
-  searchParams: Promise<{ term?: string; template?: string }>;
+  searchParams: Promise<{ term?: string; subject?: string }>;
 }) {
   const { studentId } = await params;
-  const { term, template } = await searchParams;
+  const { term, subject } = await searchParams;
 
-  if (!term || (template !== "hifz" && template !== "islamic")) {
+  if (!term || !subject) {
     notFound();
   }
 
   const { teacher, isAdmin } = await getRequestContext();
   await connectDB();
 
-  const student = await StudentModel.findById(studentId).lean();
+  const student = await StudentModel.findById(studentId)
+    .populate("subjects.subject")
+    .lean<StudentType>();
   if (!student) notFound();
-  if (!isAdmin && teacher && String(student.teacher) !== String(teacher._id)) {
+
+  const assignment = (student.subjects ?? []).find(
+    (s) => String(s.subject) === subject,
+  );
+  if (!assignment) notFound();
+  if (!isAdmin && teacher && String(assignment.teacher) !== String(teacher._id)) {
     notFound();
   }
 
-  const termDoc = await TermModel.findById(term).lean();
-  if (!termDoc) notFound();
+  const [termDoc, subjectDoc, report] = await Promise.all([
+    TermModel.findById(term).lean(),
+    SubjectModel.findById(subject).lean(),
+    ReportModel.findOne({ student: studentId, term, subject }).lean(),
+  ]);
+  if (!termDoc || !subjectDoc) notFound();
 
-  const report = await ReportModel.findOne({
-    student: studentId,
-    term,
-    template,
-  }).lean();
-
-  const tmpl = getTemplate(template as TemplateKey);
+  const tmpl = buildReportTemplate(subjectDoc.type, [
+    { id: String(subjectDoc._id), name: subjectDoc.name },
+  ]);
   const initialData = (report?.data ?? {}) as ReportData;
 
   return (
@@ -51,7 +64,7 @@ export default async function EditReportPage({
       </Link>
       <div className="mt-2 flex items-baseline justify-between">
         <h1 className="text-xl font-semibold text-emerald-900">
-          {tmpl.label}
+          {subjectDoc.name}
         </h1>
         <span className="text-sm text-gray-500">
           {termDoc.name} {termDoc.academicYear}
@@ -70,6 +83,7 @@ export default async function EditReportPage({
           initialData={initialData}
           studentId={studentId}
           termId={term}
+          subjectId={subject}
         />
       </div>
     </div>

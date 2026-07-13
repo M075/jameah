@@ -5,10 +5,6 @@ import mongoose, {
   type InferSchemaType,
 } from "mongoose";
 
-// Report templates (see lib/reports/registry in the next step).
-export const TEMPLATES = ["hifz", "islamic"] as const;
-export type TemplateKey = (typeof TEMPLATES)[number];
-
 export const REPORT_STATUSES = ["draft", "published"] as const;
 export type ReportStatus = (typeof REPORT_STATUSES)[number];
 
@@ -25,14 +21,18 @@ const reportSchema = new Schema(
       required: true,
     },
     term: { type: Schema.Types.ObjectId, ref: "Term", required: true },
-    // Which report template produced this record.
-    template: { type: String, enum: TEMPLATES, required: true },
+    // The subject this report covers (replaces the old template field).
+    subject: {
+      type: Schema.Types.ObjectId,
+      ref: "Subject",
+      required: true,
+    },
     status: {
       type: String,
       enum: REPORT_STATUSES,
       default: "draft",
     },
-    // Scored values keyed by the template's field ids (see registry).
+    // Scored values keyed by field ids derived from buildReportTemplate.
     data: { type: Schema.Types.Mixed, default: {} },
     comments: { type: String, default: "" },
     publishedAt: { type: Date, default: null },
@@ -40,11 +40,12 @@ const reportSchema = new Schema(
   { timestamps: true },
 );
 
-// One published/draft report per student + term + template combination.
-reportSchema.index({ student: 1, term: 1, template: 1 }, { unique: true });
+// One published/draft report per student + term + subject combination.
+reportSchema.index({ student: 1, term: 1, subject: 1 }, { unique: true });
 
 export const ReportModel = models.Report || model("Report", reportSchema);
 
 export type ReportType = InferSchemaType<typeof reportSchema> & {
   _id: mongoose.Types.ObjectId;
 };
+

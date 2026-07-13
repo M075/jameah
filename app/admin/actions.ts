@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
@@ -8,7 +9,11 @@ import {
   StudentModel,
   TeacherModel,
   UserModel,
+  SubjectModel,
+  ReportModel,
+  PROGRAMMES,
   type Role,
+  type ProgrammeKey,
 } from "@/lib/models";
 import { getRequestContext } from "@/lib/auth/context";
 
@@ -33,6 +38,173 @@ async function generateStudentCode(): Promise<string> {
   }
 }
 
+/* --------------------------------------------------------------------------
+ * Subjects
+ * ------------------------------------------------------------------------ */
+
+export async function createSubject(
+  _prev: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  const { isAdmin } = await getRequestContext();
+  if (!isAdmin) return { errors: ["Not authorised."] };
+
+  const name = String(formData.get("name") ?? "").trim();
+  const type = String(formData.get("type") ?? "") as ProgrammeKey;
+
+  const errors: string[] = [];
+  if (!name) errors.push("Name is required.");
+  if (!PROGRAMMES.includes(type)) errors.push("Valid type is required.");
+  if (errors.length) return { errors };
+
+  await connectDB();
+  if (await SubjectModel.findOne({ name })) {
+    return { errors: [`A subject named "${name}" already exists.`] };
+  }
+
+  const subject = await SubjectModel.create({ name, type });
+  redirect(`/admin/subjects/${String(subject._id)}`);
+}
+
+export async function updateSubject(
+  _prev: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  const { isAdmin } = await getRequestContext();
+  if (!isAdmin) return { errors: ["Not authorised."] };
+
+  const id = String(formData.get("subjectId") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const type = String(formData.get("type") ?? "") as ProgrammeKey;
+
+  const errors: string[] = [];
+  if (!id) errors.push("Missing subject id.");
+  if (!name) errors.push("Name is required.");
+  if (!PROGRAMMES.includes(type)) errors.push("Valid type is required.");
+  if (errors.length) return { errors };
+
+  await connectDB();
+  if (await SubjectModel.findOne({ name, _id: { $ne: id } })) {
+    return { errors: [`A subject named "${name}" already exists.`] };
+  }
+  await SubjectModel.findByIdAndUpdate(id, { name, type });
+  redirect(`/admin/subjects/${id}`);
+}
+
+export async function deleteSubject(formData: FormData): Promise<void> {
+  const { isAdmin } = await getRequestContext();
+  if (!isAdmin) redirect("/admin/subjects");
+
+  const id = String(formData.get("subjectId") ?? "");
+  if (!id) redirect("/admin/subjects");
+
+  await connectDB();
+  // Don't delete if any teacher or student still references it.
+  const usedByTeacher = await TeacherModel.countDocuments({ subjects: id });
+  const usedByStudent = await StudentModel.countDocuments({ "subjects.subject": id });
+  if (usedByTeacher > 0 || usedByStudent > 0) {
+    redirect("/admin/subjects?error=in_use");
+  }
+  await SubjectModel.findByIdAndDelete(id);
+  redirect("/admin/subjects");
+}
+
+/* --------------------------------------------------------------------------
+ * Teachers
+ * ------------------------------------------------------------------------ */
+
+async function upsertTeacher(
+  teacherId: string | null,
+  formData: FormData,
+): Promise<AdminActionState> {
+  const { isAdmin } = await getRequestContext();
+  if (!isAdmin) return { errors: ["Not authorised."] };
+
+  const name = String(formData.get("name") ?? "").trim();
+  const type = String(formData.get("type") ?? "") as ProgrammeKey;
+  const subjectIds = formData
+    .getAll("subjects")
+    .map(String)
+    .filter(Boolean);
+  const createLogin = formData.get("createLogin");
+  const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+
+  const errors: string[] = [];
+  if (!name) errors.push("Name is required.");
+  if (!PROGRAMMES.includes(type)) errors.push("Valid type is required.");
+  if (errors.length) return { errors };
+
+  await connectDB();
+
+  // Validate that every selected subject exists and matches the teacher's type.
+  const subjects = await SubjectModel.find({ _id: { $in: subjectIds } }).lean();
+  const validSubjectIds = subjects
+    .filter((s) => s.type === type)
+    .map((s) => s._id);
+
+  if (teacherId) {
+    const teacher = await TeacherModel.findByIdAndUpdate(
+      teacherId,
+      { name, type, subjects: validSubjectIds, active: true },
+      { new: true },
+    );
+    if (!teacher) return { errors: ["Teacher not found."] };
+  } else {
+    const teacher = await TeacherModel.create({
+      name,
+      type,
+      subjects: validSubjectIds,
+      active: true,
+    });
+    teacherId = String(teacher._id);
+  }
+
+  if (createLogin) {
+    if (!EMAIL_RE.test(email)) {
+      return { errors: ["A valid email is required to create a login."] };
+    }
+    if (password.length < 8) {
+      return { errors: ["Password must be at least 8 characters."] };
+    }
+    const lower = email.toLowerCase();
+    if (await UserModel.findOne({ email: lower })) {
+      return { errors: [`A user with email ${lower} already exists.`] };
+    }
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await UserModel.create({
+      name,
+      email: lower,
+      passwordHash,
+      role: "teacher" as Role,
+      teacherId,
+      studentId: null,
+    });
+    await TeacherModel.findByIdAndUpdate(teacherId, { userId: user._id });
+  }
+
+  redirect(teacherId ? `/admin/teachers/${teacherId}` : "/admin/teachers");
+}
+
+export async function createTeacher(
+  _prev: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  return upsertTeacher(null, formData);
+}
+
+export async function updateTeacher(
+  _prev: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  const id = String(formData.get("teacherId") ?? "");
+  return upsertTeacher(id, formData);
+}
+
+/* --------------------------------------------------------------------------
+ * Students
+ * ------------------------------------------------------------------------ */
+
 /** Create a student (and optionally a linked student login). Admin only. */
 export async function createStudent(
   _prev: AdminActionState,
@@ -47,7 +219,7 @@ export async function createStudent(
       name: z.string().trim().min(1, "Name is required."),
       grade: z.string().trim().optional().default(""),
       section: z.string().trim().optional().default(""),
-      teacherId: z.string().optional().default(""),
+      programme: z.string().trim().optional().default(""),
       createLogin: z.string().optional(),
       email: z.string().trim().optional().default(""),
       password: z.string().optional().default(""),
@@ -76,7 +248,8 @@ export async function createStudent(
     name: d.name,
     grade: d.grade,
     section: d.section,
-    teacher: d.teacherId || null,
+    programme: d.programme,
+    subjects: [],
     active: true,
   });
 
@@ -107,64 +280,174 @@ export async function createStudent(
   redirect("/admin/students");
 }
 
-/** Create a teacher (and optionally a linked teacher login). Admin only. */
-export async function createTeacher(
+/**
+ * Assign, per subject, which teacher teaches this student. Sent from the
+ * student detail page: one select per subject named `subject:<subjectId>`.
+ */
+export async function assignStudentSubjects(
+  formData: FormData,
+): Promise<AdminActionState> {
+  const { isAdmin } = await getRequestContext();
+  if (!isAdmin) return { errors: ["Not authorised."] };
+
+  const studentId = String(formData.get("studentId") ?? "");
+  if (!studentId) return { errors: ["Missing student id."] };
+
+  const assignments: { subject: string; teacher: string | null }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("subject:")) continue;
+    const subject = key.slice("subject:".length);
+    const teacher = String(value) || null;
+    assignments.push({ subject, teacher });
+  }
+
+  await connectDB();
+  const student = await StudentModel.findById(studentId);
+  if (!student) return { errors: ["Student not found."] };
+
+  student.subjects = assignments.map((a) => ({
+    subject: a.subject,
+    teacher: a.teacher,
+  }));
+  await student.save();
+
+  return { ok: true };
+}
+
+/* --------------------------------------------------------------------------
+ * Student details update + deletion
+ * ------------------------------------------------------------------------ */
+
+export async function updateStudent(
   _prev: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
   const { isAdmin } = await getRequestContext();
   if (!isAdmin) return { errors: ["Not authorised."] };
 
-  const teacherCode = String(formData.get("teacherCode") ?? "").trim();
-  const name = String(formData.get("name") ?? "").trim();
-  const subjects = formData
-    .getAll("subjects")
-    .map(String)
-    .filter((s) => s === "hifz" || s === "islamic");
-  const createLogin = formData.get("createLogin");
-  const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
+  const parsed = z
+    .object({
+      studentId: z.string().min(1, "Missing student id."),
+      studentCode: z.string().trim().optional().default(""),
+      name: z.string().trim().min(1, "Name is required."),
+      grade: z.string().trim().optional().default(""),
+      section: z.string().trim().optional().default(""),
+      programme: z.string().trim().optional().default(""),
+    })
+    .safeParse(Object.fromEntries(formData));
 
-  const errors: string[] = [];
-  if (!teacherCode) errors.push("Teacher code is required.");
-  if (!name) errors.push("Name is required.");
-  if (errors.length) return { errors };
+  if (!parsed.success) {
+    return { errors: parsed.error.issues.map((i) => i.message) };
+  }
+  const d = parsed.data;
 
   await connectDB();
-  if (await TeacherModel.findOne({ teacherCode })) {
-    return { errors: [`Teacher code "${teacherCode}" already exists.`] };
-  }
 
-  const teacher = await TeacherModel.create({
-    teacherCode,
-    name,
-    subjects,
-    active: true,
-  });
-
-  if (createLogin) {
-    if (!EMAIL_RE.test(email)) {
-      return { errors: ["A valid email is required to create a login."] };
-    }
-    if (password.length < 8) {
-      return { errors: ["Password must be at least 8 characters."] };
-    }
-    const lower = email.toLowerCase();
-    if (await UserModel.findOne({ email: lower })) {
-      return { errors: [`A user with email ${lower} already exists.`] };
-    }
-    const passwordHash = await bcrypt.hash(password, 10);
-    const user = await UserModel.create({
-      name,
-      email: lower,
-      passwordHash,
-      role: "teacher" as Role,
-      teacherId: teacher._id,
-      studentId: null,
+  if (d.studentCode) {
+    const clash = await StudentModel.findOne({
+      studentCode: d.studentCode,
+      _id: { $ne: d.studentId },
     });
-    teacher.userId = user._id;
-    await teacher.save();
+    if (clash) {
+      return { errors: [`Student code "${d.studentCode}" is already in use.`] };
+    }
   }
 
+  const student = await StudentModel.findByIdAndUpdate(
+    d.studentId,
+    {
+      studentCode: d.studentCode || undefined,
+      name: d.name,
+      grade: d.grade,
+      section: d.section,
+      programme: d.programme,
+    },
+    { new: true },
+  );
+  if (!student) return { errors: ["Student not found."] };
+
+  redirect(`/admin/students/${d.studentId}`);
+}
+
+export async function deleteStudent(formData: FormData): Promise<void> {
+  const { isAdmin } = await getRequestContext();
+  if (!isAdmin) redirect("/admin/students");
+
+  const id = String(formData.get("studentId") ?? "");
+  if (!id) redirect("/admin/students");
+
+  await connectDB();
+  const student = await StudentModel.findById(id);
+  if (!student) redirect("/admin/students");
+
+  // Remove the linked login account and this student's reports, then the
+  // student record itself.
+  if (student.userId) {
+    await UserModel.deleteOne({ _id: student.userId });
+  }
+  await ReportModel.deleteMany({ student: id });
+  await StudentModel.findByIdAndDelete(id);
+
+  redirect("/admin/students");
+}
+
+/* --------------------------------------------------------------------------
+ * Teacher deletion
+ * ------------------------------------------------------------------------ */
+
+export async function deleteTeacher(formData: FormData): Promise<void> {
+  const { isAdmin } = await getRequestContext();
+  if (!isAdmin) redirect("/admin/teachers");
+
+  const id = String(formData.get("teacherId") ?? "");
+  if (!id) redirect("/admin/teachers");
+
+  await connectDB();
+  const teacher = await TeacherModel.findById(id);
+  if (!teacher) redirect("/admin/teachers");
+
+  // Unassign this teacher from any student subject assignments (kept, not
+  // deleted). Reports they authored are retained. Done in code rather than an
+  // array-filter update because Mongoose can't resolve the subdocument path.
+  const affected = await StudentModel.find({ "subjects.teacher": id });
+  for (const student of affected) {
+    let changed = false;
+    for (const sub of student.subjects) {
+      if (sub.teacher && String(sub.teacher) === id) {
+        sub.teacher = null;
+        changed = true;
+      }
+    }
+    if (changed) await student.save();
+  }
+
+  if (teacher.userId) {
+    await UserModel.deleteOne({ _id: teacher.userId });
+  }
+
+  await TeacherModel.findByIdAndDelete(id);
   redirect("/admin/teachers");
+}
+
+/* --------------------------------------------------------------------------
+ * Reports deletion
+ * ------------------------------------------------------------------------ */
+
+export async function deleteReport(formData: FormData): Promise<void> {
+  const { isAdmin } = await getRequestContext();
+  if (!isAdmin) redirect("/admin/reports");
+
+  const id = String(formData.get("reportId") ?? "");
+  if (!id) redirect("/admin/reports");
+
+  await connectDB();
+  const report = await ReportModel.findById(id);
+  if (!report) redirect("/admin/reports");
+
+  const studentId = String(report.student);
+  await ReportModel.findByIdAndDelete(id);
+
+  revalidatePath("/admin/reports");
+  revalidatePath(`/admin/students/${studentId}`);
+  redirect("/admin/reports");
 }

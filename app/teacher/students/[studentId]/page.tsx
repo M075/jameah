@@ -5,9 +5,8 @@ import {
   StudentModel,
   TermModel,
   ReportModel,
-  type TemplateKey,
+  type StudentType,
 } from "@/lib/models";
-import { reportTemplates } from "@/lib/reports";
 import { getRequestContext } from "@/lib/auth/context";
 
 export default async function StudentReportsPage({
@@ -19,19 +18,29 @@ export default async function StudentReportsPage({
   const { teacher, isAdmin } = await getRequestContext();
   await connectDB();
 
-  const student = await StudentModel.findById(studentId).lean();
+  const student = await StudentModel.findById(studentId)
+    .populate("subjects.subject")
+    .lean<StudentType>();
   if (!student) notFound();
 
-  if (!isAdmin && teacher && String(student.teacher) !== String(teacher._id)) {
+  if (!isAdmin && teacher && !(student.subjects ?? []).some((s) => String(s.teacher) === String(teacher._id))) {
     notFound();
   }
 
   const terms = await TermModel.find().sort({ startDate: -1 }).lean();
+  const activeTerm = terms.find((t) => t.active) ?? terms[0];
+
+  // Subjects this teacher is responsible for on this student.
+  const mySubjects = (student.subjects ?? []).filter((s) =>
+    isAdmin || (teacher && String(s.teacher) === String(teacher._id)),
+  );
+
   const reports = await ReportModel.find({ student: student._id }).lean();
-  const statusOf = (termId: string, tpl: TemplateKey) =>
+  const statusOf = (subjectId: string, termId: string) =>
     reports.find(
       (r) =>
-        String(r.term) === termId && (r.template as TemplateKey) === tpl,
+        String(r.subject) === subjectId &&
+        String(r.term) === termId,
     )?.status;
 
   return (
@@ -50,62 +59,64 @@ export default async function StudentReportsPage({
         {student.grade ? ` · ${student.grade}` : ""}
       </p>
 
-      {terms.length === 0 ? (
+      {!activeTerm ? (
         <p className="mt-6 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
           No terms exist yet. Create one (or run the seed script) before entering
           marks.
         </p>
       ) : (
-        terms.map((term) => (
-          <section key={String(term._id)} className="mt-8">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-              {term.name} {term.academicYear}
-              {term.active ? (
-                <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800">
-                  ACTIVE
-                </span>
-              ) : null}
-            </h2>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {reportTemplates.map((tpl) => {
-                const status = statusOf(String(term._id), tpl.key);
-                return (
-                  <Link
-                    key={tpl.key}
-                    href={`/teacher/students/${studentId}/edit?term=${String(
-                      term._id,
-                    )}&template=${tpl.key}`}
-                    className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:border-emerald-400"
-                  >
-                    <div>
-                      <div className="font-medium text-emerald-800">
-                        {tpl.label}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {tpl.description}
-                      </div>
+        <section className="mt-8">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+            Subjects you teach · {activeTerm.name} {activeTerm.academicYear}
+          </h2>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {mySubjects.map((entry) => {
+              const subj = entry.subject as unknown as {
+                _id: string;
+                name: string;
+              };
+              const status = statusOf(
+                String(subj._id),
+                String(activeTerm._id),
+              );
+              return (
+                <Link
+                  key={String(subj._id)}
+                  href={`/teacher/students/${studentId}/edit?term=${String(
+                    activeTerm._id,
+                  )}&subject=${String(subj._id)}`}
+                  className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:border-emerald-400"
+                >
+                  <div>
+                    <div className="font-medium text-emerald-800">
+                      {subj.name}
                     </div>
-                    {status ? (
-                      <span
-                        className={
-                          status === "published"
-                            ? "rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800"
-                            : "rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800"
-                        }
-                      >
-                        {status}
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-500">
-                        not started
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
-        ))
+                  </div>
+                  {status ? (
+                    <span
+                      className={
+                        status === "published"
+                          ? "rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800"
+                          : "rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800"
+                      }
+                    >
+                      {status}
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-500">
+                      not started
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+            {mySubjects.length === 0 ? (
+              <p className="text-sm text-gray-400">
+                No subjects are assigned to you for this student.
+              </p>
+            ) : null}
+          </div>
+        </section>
       )}
     </div>
   );

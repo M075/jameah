@@ -6,16 +6,17 @@ import { connectDB } from "@/lib/db";
 import {
   StudentModel,
   ReportModel,
-  type TemplateKey,
+  SubjectModel,
   type ReportStatus,
+  type StudentType,
 } from "@/lib/models";
-import { getTemplate, getFields, type ReportData } from "@/lib/reports";
+import { buildReportTemplate, getFields, type ReportData } from "@/lib/reports";
 import { getRequestContext } from "@/lib/auth/context";
 
 const inputSchema = z.object({
   studentId: z.string().min(1),
   termId: z.string().min(1),
-  template: z.enum(["hifz", "islamic"]),
+  subjectId: z.string().min(1),
   status: z.enum(["draft", "published"]),
   data: z.record(z.string(), z.union([z.string(), z.number()])),
 });
@@ -29,7 +30,7 @@ export interface SaveResult {
 
 /** Validate report data against the template; required when publishing. */
 function validate(
-  template: ReturnType<typeof getTemplate>,
+  template: ReturnType<typeof buildReportTemplate>,
   data: ReportData,
   status: ReportStatus,
 ): string[] {
@@ -66,7 +67,7 @@ export async function saveReport(
   if (!parsed.success) {
     return { ok: false, errors: ["Invalid input."] };
   }
-  const { studentId, termId, template, status, data } = parsed.data;
+  const { studentId, termId, subjectId, status, data } = parsed.data;
 
   const { teacher, isAdmin } = await getRequestContext();
   if (!isAdmin && !teacher) {
@@ -74,13 +75,26 @@ export async function saveReport(
   }
 
   await connectDB();
-  const student = await StudentModel.findById(studentId).lean();
+  const student = await StudentModel.findById(studentId).lean<StudentType>();
   if (!student) return { ok: false, errors: ["Student not found."] };
-  if (!isAdmin && teacher && String(student.teacher) !== String(teacher._id)) {
-    return { ok: false, errors: ["This student is not assigned to you."] };
+
+  // Find the subject assignment for this student; it carries the teacher.
+  const assignment = (student.subjects ?? []).find(
+    (s) => String(s.subject) === subjectId,
+  );
+  if (!assignment) {
+    return { ok: false, errors: ["This subject is not assigned to the student."] };
+  }
+  if (!isAdmin && teacher && String(assignment.teacher) !== String(teacher._id)) {
+    return { ok: false, errors: ["This subject is not assigned to you."] };
   }
 
-  const tmpl = getTemplate(template as TemplateKey);
+  const subjectDoc = await SubjectModel.findById(subjectId).lean();
+  if (!subjectDoc) return { ok: false, errors: ["Subject not found."] };
+
+  const tmpl = buildReportTemplate(subjectDoc.type, [
+    { id: String(subjectDoc._id), name: subjectDoc.name },
+  ]);
   const errors = validate(tmpl, data as ReportData, status);
   if (errors.length) return { ok: false, errors };
 
@@ -96,12 +110,12 @@ export async function saveReport(
   }
 
   const report = await ReportModel.findOneAndUpdate(
-    { student: studentId, term: termId, template },
+    { student: studentId, term: termId, subject: subjectId },
     {
       student: studentId,
       term: termId,
-      template,
-      teacher: isAdmin ? student.teacher : teacher!._id,
+      subject: subjectId,
+      teacher: assignment.teacher,
       status,
       data: clean,
       comments: typeof clean.remarks === "string" ? clean.remarks : "",

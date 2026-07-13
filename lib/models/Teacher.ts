@@ -4,13 +4,19 @@ import mongoose, {
   models,
   type InferSchemaType,
 } from "mongoose";
+import { PROGRAMMES, type ProgrammeKey } from "./Subject";
 
 const teacherSchema = new Schema(
   {
-    teacherCode: { type: String, required: true, unique: true, trim: true },
     name: { type: String, required: true, trim: true },
-    // Subjects this teacher can report on, e.g. "hifz", "islamic".
-    subjects: { type: [String], default: [] },
+    // A teacher is of exactly one programme — Hifz or Aalim, never both.
+    type: {
+      type: String,
+      enum: PROGRAMMES,
+      required: true,
+    },
+    // Subjects (within their programme) this teacher is assigned to teach.
+    subjects: { type: [{ type: Schema.Types.ObjectId, ref: "Subject" }], default: [] },
     userId: { type: Schema.Types.ObjectId, ref: "User", default: null },
     active: { type: Boolean, default: true },
   },
@@ -21,4 +27,6 @@ export const TeacherModel = models.Teacher || model("Teacher", teacherSchema);
 
 export type TeacherType = InferSchemaType<typeof teacherSchema> & {
   _id: mongoose.Types.ObjectId;
+  type: ProgrammeKey;
 };
+

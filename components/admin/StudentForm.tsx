@@ -7,11 +7,7 @@ const field =
   "w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900";
 const label = "block text-sm font-medium text-gray-700";
 
-export default function StudentForm({
-  teachers,
-}: {
-  teachers: { _id: string; name: string }[];
-}) {
+export default function StudentForm() {
   const [state, formAction, pending] = useActionState<
     AdminActionState,
     FormData
@@ -39,8 +35,8 @@ export default function StudentForm({
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className={label}>Class</label>
-          <input name="grade" required className={field} placeholder="Hifz/Aalim" />
+          <label className={label}>Class / year group</label>
+          <input name="grade" required className={field} placeholder="Year 1" />
         </div>
         <div>
           <label className={label}>Year</label>
@@ -49,15 +45,17 @@ export default function StudentForm({
       </div>
 
       <div>
-        <label className={label}>Assigned teacher</label>
-        <select name="teacherId" className={field} defaultValue="">
-          <option value="">— none —</option>
-          {teachers.map((t) => (
-            <option key={t._id} value={t._id}>
-              {t.name}
-            </option>
-          ))}
+        <label className={label}>
+          Programme <span className="text-red-500">*</span>
+        </label>
+        <select name="programme" required defaultValue="" className={field}>
+          <option value="">— select —</option>
+          <option value="hifz">Hifz</option>
+          <option value="aalim">Aalim</option>
         </select>
+        <p className="mt-1 text-xs text-gray-400">
+          Assign a teacher per subject on the student's page afterwards.
+        </p>
       </div>
 
       <div className="rounded-md border border-gray-200 p-3">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getRequestContext } from "@/lib/auth/context";
 import SignOutButton from "@/components/SignOutButton";
+import Image from "next/image";
 
 const NAV: Record<string, { href: string; label: string }[]> = {
   teacher: [{ href: "/teacher", label: "My Students" }],
@@ -9,6 +10,7 @@ const NAV: Record<string, { href: string; label: string }[]> = {
     { href: "/admin", label: "Dashboard" },
     { href: "/admin/students", label: "Students" },
     { href: "/admin/teachers", label: "Teachers" },
+    { href: "/admin/reports", label: "Reports" },
     { href: "/admin/backup", label: "Backup" },
   ],
 };
@@ -27,8 +29,9 @@ export default async function AppShell({
     <div className="flex min-h-screen flex-col bg-gray-50">
       <header className="no-print border-b border-gray-200 bg-white">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-4 py-3">
-          <Link href="/" className="font-semibold text-emerald-900">
-            Jameah · Islamic Institute
+          <Link href="/" className="font-semibold text-emerald-900 flex items-center gap-2">
+            <Image src="/logo.png" width={50} height={50} alt="Jameah Mahmoodiyah logo" className="h-8 w-8 rounded-md" />
+            Jameah Mahmoodiyah Report System
           </Link>
           <nav className="flex flex-1 flex-wrap gap-1">
             {nav.map((item) => (
