@@ -9,6 +9,7 @@ const NAV: Record<string, SidebarNavItem[]> = {
     { href: "/admin/students", label: "Students", icon: "students" },
     { href: "/admin/teachers", label: "Teachers", icon: "teachers" },
     { href: "/admin/subjects", label: "Subjects", icon: "subjects" },
+    { href: "/admin/terms", label: "Terms", icon: "terms" },
     { href: "/admin/reports", label: "Reports", icon: "reports" },
     { href: "/admin/backup", label: "Backup", icon: "backup" },
   ],

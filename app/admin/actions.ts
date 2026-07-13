@@ -13,6 +13,7 @@ import {
   UserModel,
   SubjectModel,
   ReportModel,
+  TermModel,
   PROGRAMMES,
   type Role,
   type ProgrammeKey,
@@ -98,6 +99,22 @@ async function assignSubjectsForYear(studentId: string): Promise<void> {
   await student.save();
 }
 
+/**
+ * Recompute subject assignments for every Aalim student in a given year.
+ * Called when a subject is added to / moved between years so existing
+ * students of that class immediately pick up (or drop) the subject.
+ */
+async function reassignStudentsInYear(year: number): Promise<void> {
+  if (!Number.isInteger(year) || year < 1 || year > 6) return;
+  const students = await StudentModel.find({
+    programme: "aalim",
+    year,
+  }).select("_id");
+  for (const s of students) {
+    await assignSubjectsForYear(String(s._id));
+  }
+}
+
 /* --------------------------------------------------------------------------
  * Subjects
  * ------------------------------------------------------------------------ */
@@ -157,6 +174,11 @@ export async function createSubject(
     year: yearRaw,
     teacher,
   });
+
+  // Existing students in this class should immediately gain the new subject.
+  if (type === "aalim") {
+    await reassignStudentsInYear(yearRaw);
+  }
   redirect(`/admin/subjects/${String(subject._id)}`);
 }
 
@@ -216,6 +238,9 @@ export async function updateSubject(
     teacher = t._id;
   }
 
+  const existing = await SubjectModel.findById(id).lean<SubjectType>();
+  const oldYear = existing?.year ?? null;
+
   const updated = await SubjectModel.findByIdAndUpdate(
     id,
     { name, type, year: yearRaw, teacher },
@@ -229,6 +254,21 @@ export async function updateSubject(
       { "subjects.subject": updated._id },
       { $set: { "subjects.$.teacher": teacher } },
     );
+  }
+
+  // If the year (or programme) changed, recompute assignments for the
+  // affected class(es) so students gain/drop this subject appropriately.
+  if (type === "aalim") {
+    if (oldYear !== yearRaw) {
+      if (oldYear) await reassignStudentsInYear(oldYear);
+      await reassignStudentsInYear(yearRaw);
+    } else if (existing && existing.type !== "aalim") {
+      // Programme switched to Aalim — assign to the new year's students.
+      await reassignStudentsInYear(yearRaw);
+    }
+  } else if (oldYear) {
+    // Programme switched away from Aalim — drop it from the old year.
+    await reassignStudentsInYear(oldYear);
   }
 
   redirect(`/admin/subjects/${id}`);
@@ -651,3 +691,102 @@ export async function deleteReport(formData: FormData): Promise<void> {
   revalidatePath(`/admin/students/${studentId}`);
   redirect("/admin/reports");
 }
+
+/* --------------------------------------------------------------------------
+ * Terms
+ * ------------------------------------------------------------------------ */
+
+/** Parse a date-input ("YYYY-MM-DD") into a Date, or null when empty. */
+function parseDate(raw: FormDataEntryValue | null): Date | null {
+  const s = raw ? String(raw).trim() : "";
+  if (!s) return null;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+export async function createTerm(
+  _prev: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  const { isAdmin } = await getRequestContext();
+  if (!isAdmin) return { errors: ["Not authorised."] };
+
+  const name = String(formData.get("name") ?? "").trim();
+  const academicYear = String(formData.get("academicYear") ?? "").trim();
+  const active = formData.get("active") === "on";
+
+  if (!name) return { errors: ["Name is required."] };
+
+  await connectDB();
+  // Active is exclusive: clearing it from every other term first.
+  if (active) {
+    await TermModel.updateMany({}, { active: false });
+  }
+  const term = await TermModel.create({
+    name,
+    academicYear,
+    startDate: parseDate(formData.get("startDate")),
+    endDate: parseDate(formData.get("endDate")),
+    active,
+  });
+  revalidatePath("/admin/terms");
+  redirect(`/admin/terms/${String(term._id)}`);
+}
+
+export async function updateTerm(
+  _prev: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  const { isAdmin } = await getRequestContext();
+  if (!isAdmin) return { errors: ["Not authorised."] };
+
+  const id = String(formData.get("termId") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const academicYear = String(formData.get("academicYear") ?? "").trim();
+  const active = formData.get("active") === "on";
+
+  if (!id) return { errors: ["Missing term id."] };
+  if (!name) return { errors: ["Name is required."] };
+
+  await connectDB();
+  if (active) {
+    await TermModel.updateMany({ _id: { $ne: id } }, { active: false });
+  }
+  await TermModel.findByIdAndUpdate(id, {
+    name,
+    academicYear,
+    startDate: parseDate(formData.get("startDate")),
+    endDate: parseDate(formData.get("endDate")),
+    active,
+  });
+  revalidatePath("/admin/terms");
+  redirect(`/admin/terms/${id}`);
+}
+
+export async function deleteTerm(formData: FormData): Promise<void> {
+  const { isAdmin } = await getRequestContext();
+  if (!isAdmin) redirect("/admin/terms");
+
+  const id = String(formData.get("termId") ?? "");
+  if (!id) redirect("/admin/terms");
+
+  await connectDB();
+  await TermModel.findByIdAndDelete(id);
+  redirect("/admin/terms");
+}
+
+/** Make a single term active and clear the flag on all others. */
+export async function setActiveTerm(formData: FormData): Promise<void> {
+  const { isAdmin } = await getRequestContext();
+  if (!isAdmin) redirect("/admin/terms");
+
+  const id = String(formData.get("termId") ?? "");
+  if (!id) redirect("/admin/terms");
+
+  await connectDB();
+  await TermModel.updateMany({}, { active: false });
+  await TermModel.findByIdAndUpdate(id, { active: true });
+  revalidatePath("/admin/terms");
+  redirect("/admin/terms");
+}
+

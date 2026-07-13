@@ -10,6 +10,14 @@ import {
 import { getRequestContext } from "@/lib/auth/context";
 import { deleteReport } from "@/app/admin/actions";
 
+/** Read the _id whether the value is a populated doc or a bare ObjectId. */
+function docId(v: unknown): string {
+  if (v && typeof v === "object" && "_id" in (v as object)) {
+    return String((v as { _id: unknown })._id);
+  }
+  return String(v);
+}
+
 export default async function AdminReportsPage({
   searchParams,
 }: {
@@ -112,8 +120,8 @@ export default async function AdminReportsPage({
         )}
       </form>
 
-      <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white">
-        <table className="w-full text-sm">
+      <div className="mt-6 overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <table className="min-w-[680px] w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-500">
             <tr>
               <th className="px-4 py-2 font-medium">Student</th>
@@ -167,7 +175,7 @@ export default async function AdminReportsPage({
                         View
                       </Link>
                       <Link
-                        href={`/teacher/students/${String(r.student)}/edit?term=${String(r.term)}&subject=${String(subj?._id)}`}
+                        href={`/teacher/students/${docId(r.student)}/edit?term=${docId(r.term)}&subject=${String(subj?._id)}`}
                         className="rounded-md border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100"
                       >
                         Edit

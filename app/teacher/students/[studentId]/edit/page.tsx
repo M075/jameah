@@ -34,8 +34,18 @@ export default async function EditReportPage({
     .lean<StudentType>();
   if (!student) notFound();
 
+  // `s.subject` may be a populated doc or a bare ObjectId; read the id either
+  // way so the comparison against the `subject` query param is correct.
+  const subjectIdOf = (s: { subject: unknown }): string => {
+    const sub = s.subject as { _id?: unknown } | string | { toString(): string };
+    if (sub && typeof sub === "object" && "_id" in sub) {
+      return String((sub as { _id: unknown })._id);
+    }
+    return String(sub);
+  };
+
   const assignment = (student.subjects ?? []).find(
-    (s) => String(s.subject) === subject,
+    (s) => subjectIdOf(s) === subject,
   );
   if (!assignment) notFound();
   if (!isAdmin && teacher && String(assignment.teacher) !== String(teacher._id)) {

@@ -126,6 +126,9 @@ export async function saveReport(
 
   revalidatePath(`/teacher/students/${studentId}`);
   revalidatePath(`/teacher/students/${studentId}/edit`);
+  revalidatePath(`/admin/students/${studentId}`);
+  revalidatePath(`/admin/students/${studentId}/marks`);
+  revalidatePath(`/admin/reports`);
 
   return {
     ok: true,

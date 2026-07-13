@@ -28,8 +28,8 @@ export default async function AdminStudentsPage() {
         {students.length} student{students.length === 1 ? "" : "s"}
       </p>
 
-      <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white">
-        <table className="w-full text-sm">
+      <div className="mt-6 overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <table className="min-w-[680px] w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-500">
             <tr>
               <th className="px-4 py-2 font-medium">Code</th>
@@ -66,6 +66,12 @@ export default async function AdminStudentsPage() {
                 </td>
                 <td className="px-4 py-2 text-right">
                   <div className="flex items-center justify-end gap-2">
+                    <Link
+                      href={`/admin/students/${String(s._id)}/marks`}
+                      className="rounded-md border border-emerald-300 px-2.5 py-1 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                    >
+                      Marks
+                    </Link>
                     <Link
                       href={`/admin/students/${String(s._id)}`}
                       className="rounded-md border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100"

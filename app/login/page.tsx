@@ -24,7 +24,7 @@ export default async function LoginPage({
       }}
     >
       {/* Overlay for contrast */}
-      <div className="absolute inset-0 bg-gradient-to-b from-white/70 to-black/80" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/70 to-black/70" />
 
       <main className="relative z-10 mx-auto w-full max-w-md">
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
