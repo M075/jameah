@@ -1,17 +1,16 @@
-import Link from "next/link";
 import { getRequestContext } from "@/lib/auth/context";
-import SignOutButton from "@/components/SignOutButton";
-import Image from "next/image";
+import Sidebar, { type IconName, type SidebarNavItem } from "@/components/Sidebar";
 
-const NAV: Record<string, { href: string; label: string }[]> = {
-  teacher: [{ href: "/teacher", label: "My Students" }],
-  student: [{ href: "/student", label: "My Reports" }],
+const NAV: Record<string, SidebarNavItem[]> = {
+  teacher: [{ href: "/teacher", label: "My Students", icon: "students" }],
+  student: [{ href: "/student", label: "My Reports", icon: "reports" }],
   admin: [
-    { href: "/admin", label: "Dashboard" },
-    { href: "/admin/students", label: "Students" },
-    { href: "/admin/teachers", label: "Teachers" },
-    { href: "/admin/reports", label: "Reports" },
-    { href: "/admin/backup", label: "Backup" },
+    { href: "/admin", label: "Dashboard", icon: "dashboard" },
+    { href: "/admin/students", label: "Students", icon: "students" },
+    { href: "/admin/teachers", label: "Teachers", icon: "teachers" },
+    { href: "/admin/subjects", label: "Subjects", icon: "subjects" },
+    { href: "/admin/reports", label: "Reports", icon: "reports" },
+    { href: "/admin/backup", label: "Backup", icon: "backup" },
   ],
 };
 
@@ -26,34 +25,13 @@ export default async function AppShell({
   const name = session?.user?.name ?? "User";
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
-      <header className="no-print border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-4 py-3">
-          <Link href="/" className="font-semibold text-emerald-900 flex items-center gap-2">
-            <Image src="/logo.png" width={50} height={50} alt="Jameah Mahmoodiyah logo" className="h-8 w-8 rounded-md" />
-            Jameah Mahmoodiyah Report System
-          </Link>
-          <nav className="flex flex-1 flex-wrap gap-1">
-            {nav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="rounded-md px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-emerald-50 hover:text-emerald-800"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-          <span className="text-sm text-gray-500">
-            {name}
-            {isAdmin ? " (admin)" : ""}
-          </span>
-          <SignOutButton />
-        </div>
-      </header>
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
-        {children}
-      </main>
+    <div className="min-h-screen bg-gray-50">
+      <Sidebar nav={nav} userName={name} isAdmin={isAdmin} />
+      <div className="md:pl-64">
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

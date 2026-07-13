@@ -53,13 +53,22 @@ export async function connectDB(): Promise<typeof mongoose> {
  * Drop indexes that belonged to fields which no longer exist in the schemas.
  * Older versions of this app defined a unique (non-sparse) `teacherCode` on
  * teachers; once the field was removed the index lingered in the collection
- * and blocked every insert (duplicate `null` key). This runs once per
- * connection and is a no-op when the index is already gone.
+ * and blocked every insert (duplicate `null` key). We enumerate the indexes
+ * and drop any whose key references the removed field, so it works regardless
+ * of the exact index name. Runs once per connection; no-op when gone.
  */
 async function repairLegacyIndexes() {
   const db = mongoose.connection;
   if (!db || !db.db) return;
-  await db.collection("teachers").dropIndex("teacherCode_1").catch(() => {});
+  const teachers = db.collection("teachers");
+  const indexes = await teachers.indexes().catch(() => []);
+  for (const idx of indexes) {
+    const fields = Object.keys(idx.key ?? {});
+    const isLegacy = fields.some((f) => f === "teacherCode" || f === "code");
+    if (isLegacy && idx.name) {
+      await teachers.dropIndex(idx.name).catch(() => {});
+    }
+  }
 }
 
 /** Convenience: the default mongoose connection (after connectDB). */
