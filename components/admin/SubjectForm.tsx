@@ -14,7 +14,7 @@ const label = "block text-sm font-medium text-gray-700";
 export default function SubjectForm({
   id,
   name = "",
-  type = "hifz",
+  type = "aalim",
 }: {
   id?: string;
   name?: string;
@@ -39,7 +39,7 @@ export default function SubjectForm({
           required
           defaultValue={name}
           className={field}
-          placeholder="e.g. Tajweed"
+          placeholder="e.g. Al-Nahw Al-Wadih"
         />
       </div>
 
@@ -48,8 +48,8 @@ export default function SubjectForm({
           Type <span className="text-red-500">*</span>
         </label>
         <select name="type" defaultValue={type} className={field}>
-          <option value="hifz">Hifz</option>
           <option value="aalim">Aalim</option>
+          <option value="hifz">Hifz</option>
         </select>
       </div>
 
