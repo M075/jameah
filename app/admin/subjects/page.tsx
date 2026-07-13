@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { connectDB } from "@/lib/db";
-import { SubjectModel, TeacherModel, type TeacherType } from "@/lib/models";
+import { SubjectModel, TeacherModel, type SubjectType, type TeacherType } from "@/lib/models";
 import { getRequestContext } from "@/lib/auth/context";
 import SubjectForm from "@/components/admin/SubjectForm";
 
@@ -8,12 +8,20 @@ export default async function AdminSubjectsPage() {
   await getRequestContext();
   await connectDB();
 
-  const subjects = await SubjectModel.find().sort({ type: 1, name: 1 }).lean();
-  const teachers = await TeacherModel.find().lean<TeacherType[]>();
+  const subjects = await SubjectModel.find()
+    .sort({ type: 1, year: 1, name: 1 })
+    .populate("teacher")
+    .lean<SubjectType[]>();
+  // Aalim teachers are the only ones who can be assigned to subjects.
+  const teachers = await TeacherModel.find({ type: "aalim" })
+    .sort({ name: 1 })
+    .lean<TeacherType[]>();
 
-  const teacherCount = (subjectId: string) =>
-    teachers.filter((t) => t.subjects.some((s) => String(s) === subjectId))
-      .length;
+  const teacherName = (subjectId: string) => {
+    const subj = subjects.find((s) => String(s._id) === subjectId);
+    const t = subj?.teacher as { name?: string } | null | undefined;
+    return t?.name ?? "—";
+  };
 
   return (
     <div>
@@ -39,7 +47,8 @@ export default async function AdminSubjectsPage() {
             <tr>
               <th className="px-4 py-2 font-medium">Name</th>
               <th className="px-4 py-2 font-medium">Type</th>
-              <th className="px-4 py-2 font-medium text-right">Teachers</th>
+              <th className="px-4 py-2 font-medium">Year</th>
+              <th className="px-4 py-2 font-medium">Teacher</th>
               <th className="px-4 py-2 font-medium text-right">Action</th>
             </tr>
           </thead>
@@ -60,8 +69,9 @@ export default async function AdminSubjectsPage() {
                     {s.type === "hifz" ? "Hifz" : "Aalim"}
                   </span>
                 </td>
-                <td className="px-4 py-2 text-right text-gray-600">
-                  {teacherCount(String(s._id))}
+                <td className="px-4 py-2 text-gray-600">{s.year}</td>
+                <td className="px-4 py-2 text-gray-600">
+                  {teacherName(String(s._id))}
                 </td>
                 <td className="px-4 py-2 text-right">
                   <Link
@@ -92,7 +102,12 @@ export default async function AdminSubjectsPage() {
           Add a subject
         </h2>
         <div className="mt-4">
-          <SubjectForm />
+          <SubjectForm
+            teachers={teachers.map((t) => ({
+              _id: String(t._id),
+              name: t.name,
+            }))}
+          />
         </div>
       </div>
     </div>

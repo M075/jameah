@@ -11,26 +11,16 @@ const field =
   "w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900";
 const label = "block text-sm font-medium text-gray-700";
 
-export interface SubjectOption {
-  _id: string;
-  name: string;
-  type: "hifz" | "aalim";
-}
-
 export default function TeacherForm({
   id,
   name = "",
   type: initialType = "hifz",
   email = "",
-  assigned = [],
-  subjects,
 }: {
   id?: string;
   name?: string;
   type?: "hifz" | "aalim";
   email?: string;
-  assigned?: string[];
-  subjects: SubjectOption[];
 }) {
   const action = id ? updateTeacher : createTeacher;
   const [state, formAction, pending] = useActionState<
@@ -41,8 +31,6 @@ export default function TeacherForm({
   const [createLogin, setCreateLogin] = useState<boolean>(Boolean(email));
   const [loginMethod, setLoginMethod] = useState<"magic" | "password">("magic");
   const [showPassword, setShowPassword] = useState(false);
-
-  const visibleSubjects = subjects.filter((s) => s.type === type);
 
   return (
     <form action={formAction} className="max-w-lg space-y-4">
@@ -76,32 +64,6 @@ export default function TeacherForm({
         </select>
       </div>
 
-      <div>
-        <label className={label}>Subjects</label>
-        <div className="mt-1 space-y-1">
-          {visibleSubjects.length === 0 ? (
-            <p className="text-xs text-gray-400">
-              No {type} subjects yet. Add them from the Subjects page.
-            </p>
-          ) : (
-            visibleSubjects.map((s) => (
-              <label
-                key={s._id}
-                className="flex items-center gap-2 text-sm text-gray-700"
-              >
-                <input
-                  type="checkbox"
-                  name="subjects"
-                  value={s._id}
-                  defaultChecked={assigned.includes(s._id)}
-                />
-                {s.name}
-              </label>
-            ))
-          )}
-        </div>
-      </div>
-
       <div className="rounded-md border border-gray-200 p-3">
         <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
           <input
@@ -118,8 +80,8 @@ export default function TeacherForm({
           <div className="mt-3 grid gap-3">
             {email ? (
               <p className="text-xs text-gray-500">
-                This teacher already has a login. Saving updates the linked email
-                and name; it won&apos;t re-send a sign-in link.
+                This teacher already has a login. Saving updates the linked
+                email and name; it won&apos;t re-send a sign-in link.
               </p>
             ) : null}
             <div>

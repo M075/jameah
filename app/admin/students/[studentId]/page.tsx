@@ -3,16 +3,12 @@ import { notFound } from "next/navigation";
 import { connectDB } from "@/lib/db";
 import {
   StudentModel,
-  SubjectModel,
-  TeacherModel,
   TermModel,
   ReportModel,
-  type SubjectType,
-  type TeacherType,
   type StudentType,
 } from "@/lib/models";
 import { getRequestContext } from "@/lib/auth/context";
-import { assignStudentSubjects, deleteStudent } from "@/app/admin/actions";
+import { deleteStudent } from "@/app/admin/actions";
 import StudentDetailsForm from "@/components/admin/StudentDetailsForm";
 
 export default async function AdminStudentReportsPage({
@@ -32,24 +28,6 @@ export default async function AdminStudentReportsPage({
 
   const terms = await TermModel.find().sort({ startDate: -1 }).lean();
   const activeTerm = terms.find((t) => t.active) ?? terms[0];
-
-  const programmeSubjects = student.programme
-    ? await SubjectModel.find({ type: student.programme })
-        .sort({ name: 1 })
-        .lean<SubjectType[]>()
-    : [];
-  const teachers = await TeacherModel.find({
-    type: student.programme,
-  })
-    .populate("subjects")
-    .lean<TeacherType[]>();
-
-  const assignedTeacher = (subjectId: string): string => {
-    const entry = (student.subjects ?? []).find(
-      (s) => String(s.subject) === subjectId,
-    );
-    return entry && entry.teacher ? String(entry.teacher) : "";
-  };
 
   const reports = await ReportModel.find({ student: studentId })
     .populate("term")
@@ -83,74 +61,61 @@ export default async function AdminStudentReportsPage({
           studentId={studentId}
           studentCode={student.studentCode ?? ""}
           name={student.name}
-          grade={student.grade ?? ""}
-          section={student.section ?? ""}
+          year={student.year ?? null}
           programme={student.programme ?? ""}
         />
       </div>
 
-      {/* Per-subject teacher assignment */}
+      {/* Auto-assigned subjects (derived from the student's year) */}
       <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
         <h2 className="text-sm font-semibold text-emerald-900">
-          Assign teachers per subject
+          Subjects (auto-assigned)
         </h2>
-        {!student.programme ? (
-          <p className="mt-2 text-sm text-amber-700">
-            Set the student's programme on the Add/Edit form before assigning
-            subjects.
-          </p>
-        ) : (
-          <form
-            action={async (fd: FormData) => {
-              await assignStudentSubjects(fd);
-            }}
-            className="mt-4 space-y-3"
-          >
-            <input type="hidden" name="studentId" value={studentId} />
-            {programmeSubjects.map((subj) => {
-              const eligible = teachers.filter((t) =>
-                (t.subjects as { _id: unknown }[]).some(
-                  (s) => String(s._id) === String(subj._id),
-                ),
-              );
+        {student.subjects && student.subjects.length > 0 ? (
+          <ul className="mt-3 divide-y divide-gray-100">
+            {student.subjects.map((entry) => {
+              const subj = entry.subject as unknown as {
+                _id: string;
+                name: string;
+              };
+              const teach = entry.teacher as unknown as {
+                name?: string;
+              } | null;
               return (
-                <div
+                <li
                   key={String(subj._id)}
-                  className="flex items-center gap-3"
+                  className="flex items-center justify-between py-2 text-sm"
                 >
-                  <span className="w-40 text-sm font-medium text-gray-700">
+                  <span className="font-medium text-gray-800">
                     {subj.name}
                   </span>
-                  <select
-                    name={`subject:${String(subj._id)}`}
-                    defaultValue={assignedTeacher(String(subj._id))}
-                    className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                  >
-                    <option value="">— none —</option>
-                    {eligible.map((t) => (
-                      <option key={String(t._id)} value={String(t._id)}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  <span className="text-gray-600">
+                    {teach?.name ?? "No teacher assigned"}
+                  </span>
+                </li>
               );
             })}
-            <button
-              type="submit"
-              className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
-            >
-              Save assignments
-            </button>
-          </form>
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-gray-400">
+            {student.programme === "aalim"
+              ? "No subjects are assigned yet — set the student's year above."
+              : "Hifz students have no subjects."}
+          </p>
         )}
       </div>
 
       {/* Per-subject report cards */}
       <div className="mt-6 space-y-3">
         {reports.map((r) => {
-          const term = r.term as unknown as { name: string; academicYear: string };
-          const subject = r.subject as unknown as { name: string; _id: string };
+          const term = r.term as unknown as {
+            name: string;
+            academicYear: string;
+          };
+          const subject = r.subject as unknown as {
+            name: string;
+            _id: string;
+          };
           const isPublished = r.status === "published";
           return (
             <div

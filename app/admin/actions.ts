@@ -1,5 +1,6 @@
 "use server";
 
+import type { Types } from "mongoose";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -15,6 +16,7 @@ import {
   PROGRAMMES,
   type Role,
   type ProgrammeKey,
+  type SubjectType,
 } from "@/lib/models";
 import { getRequestContext } from "@/lib/auth/context";
 import { signMagicToken } from "@/lib/auth/magicToken";
@@ -70,6 +72,32 @@ async function sendMagicLoginEmail(
   }
 }
 
+/**
+ * Recompute a student's subject list from their programme + year. Aalim
+ * students in year N are auto-assigned every Aalim subject for that year,
+ * each carrying that subject's teacher (so teacher dashboards populate).
+ * Hifz students (or any student with no year) get an empty list — Hifz
+ * has no subjects.
+ */
+async function assignSubjectsForYear(studentId: string): Promise<void> {
+  const student = await StudentModel.findById(studentId);
+  if (!student) return;
+
+  if (student.programme !== "aalim" || !student.year) {
+    student.subjects = [];
+  } else {
+    const subs = await SubjectModel.find({
+      type: "aalim",
+      year: student.year,
+    }).lean<SubjectType[]>();
+    student.subjects = subs.map((s) => ({
+      subject: s._id,
+      teacher: s.teacher ?? null,
+    }));
+  }
+  await student.save();
+}
+
 /* --------------------------------------------------------------------------
  * Subjects
  * ------------------------------------------------------------------------ */
@@ -83,18 +111,52 @@ export async function createSubject(
 
   const name = String(formData.get("name") ?? "").trim();
   const type = String(formData.get("type") ?? "") as ProgrammeKey;
+  const yearRaw = Number(formData.get("year"));
+  const teacherId = String(formData.get("teacher") ?? "").trim();
 
   const errors: string[] = [];
   if (!name) errors.push("Name is required.");
   if (!PROGRAMMES.includes(type)) errors.push("Valid type is required.");
+  if (
+    !Number.isInteger(yearRaw) ||
+    yearRaw < 1 ||
+    yearRaw > 6
+  ) {
+    errors.push("Year must be a whole number between 1 and 6.");
+  }
   if (errors.length) return { errors };
 
   await connectDB();
-  if (await SubjectModel.findOne({ name })) {
-    return { errors: [`A subject named "${name}" already exists.`] };
+  if (
+    await SubjectModel.findOne({ name, year: yearRaw, type })
+  ) {
+    return {
+      errors: [
+        `A ${type} subject named "${name}" for year ${yearRaw} already exists.`,
+      ],
+    };
   }
 
-  const subject = await SubjectModel.create({ name, type });
+  let teacher: Types.ObjectId | null = null;
+  if (teacherId) {
+    const t = await TeacherModel.findById(teacherId).lean();
+    if (!t) return { errors: ["Selected teacher does not exist."] };
+    if (t.type !== type) {
+      return {
+        errors: [
+          `${t.name} is a ${t.type} teacher and can't teach a ${type} subject.`,
+        ],
+      };
+    }
+    teacher = t._id;
+  }
+
+  const subject = await SubjectModel.create({
+    name,
+    type,
+    year: yearRaw,
+    teacher,
+  });
   redirect(`/admin/subjects/${String(subject._id)}`);
 }
 
@@ -108,18 +170,67 @@ export async function updateSubject(
   const id = String(formData.get("subjectId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const type = String(formData.get("type") ?? "") as ProgrammeKey;
+  const yearRaw = Number(formData.get("year"));
+  const teacherId = String(formData.get("teacher") ?? "").trim();
 
   const errors: string[] = [];
   if (!id) errors.push("Missing subject id.");
   if (!name) errors.push("Name is required.");
   if (!PROGRAMMES.includes(type)) errors.push("Valid type is required.");
+  if (
+    !Number.isInteger(yearRaw) ||
+    yearRaw < 1 ||
+    yearRaw > 6
+  ) {
+    errors.push("Year must be a whole number between 1 and 6.");
+  }
   if (errors.length) return { errors };
 
   await connectDB();
-  if (await SubjectModel.findOne({ name, _id: { $ne: id } })) {
-    return { errors: [`A subject named "${name}" already exists.`] };
+  if (
+    await SubjectModel.findOne({
+      name,
+      year: yearRaw,
+      type,
+      _id: { $ne: id },
+    })
+  ) {
+    return {
+      errors: [
+        `A ${type} subject named "${name}" for year ${yearRaw} already exists.`,
+      ],
+    };
   }
-  await SubjectModel.findByIdAndUpdate(id, { name, type });
+
+  let teacher: Types.ObjectId | null = null;
+  if (teacherId) {
+    const t = await TeacherModel.findById(teacherId).lean();
+    if (!t) return { errors: ["Selected teacher does not exist."] };
+    if (t.type !== type) {
+      return {
+        errors: [
+          `${t.name} is a ${t.type} teacher and can't teach a ${type} subject.`,
+        ],
+      };
+    }
+    teacher = t._id;
+  }
+
+  const updated = await SubjectModel.findByIdAndUpdate(
+    id,
+    { name, type, year: yearRaw, teacher },
+    { new: true },
+  );
+
+  // Keep student dashboards correct: anyone already assigned this subject
+  // should now point at the (possibly new) teacher.
+  if (updated && teacher) {
+    await StudentModel.updateMany(
+      { "subjects.subject": updated._id },
+      { $set: { "subjects.$.teacher": teacher } },
+    );
+  }
+
   redirect(`/admin/subjects/${id}`);
 }
 
@@ -131,10 +242,11 @@ export async function deleteSubject(formData: FormData): Promise<void> {
   if (!id) redirect("/admin/subjects");
 
   await connectDB();
-  // Don't delete if any teacher or student still references it.
-  const usedByTeacher = await TeacherModel.countDocuments({ subjects: id });
-  const usedByStudent = await StudentModel.countDocuments({ "subjects.subject": id });
-  if (usedByTeacher > 0 || usedByStudent > 0) {
+  // Don't delete while any student still references it.
+  const usedByStudent = await StudentModel.countDocuments({
+    "subjects.subject": id,
+  });
+  if (usedByStudent > 0) {
     redirect("/admin/subjects?error=in_use");
   }
   await SubjectModel.findByIdAndDelete(id);
@@ -285,8 +397,7 @@ export async function createStudent(
     .object({
       studentCode: z.string().trim().optional().default(""),
       name: z.string().trim().min(1, "Name is required."),
-      grade: z.string().trim().optional().default(""),
-      section: z.string().trim().optional().default(""),
+      year: z.string().trim().optional().default(""),
       programme: z.string().trim().optional().default(""),
       createLogin: z.string().optional(),
       loginMethod: z.string().optional().default("magic"),
@@ -300,6 +411,23 @@ export async function createStudent(
   }
   const d = parsed.data;
 
+  const yearNum = d.year ? Number(d.year) : undefined;
+  const yearValid =
+    yearNum !== undefined &&
+    Number.isInteger(yearNum) &&
+    yearNum >= 1 &&
+    yearNum <= 6;
+
+  const errors: string[] = [];
+  if (!d.name) errors.push("Name is required.");
+  if (!PROGRAMMES.includes(d.programme as ProgrammeKey)) {
+    errors.push("Valid programme is required.");
+  }
+  if (d.programme === "aalim" && !yearValid) {
+    errors.push("Year (1–6) is required for Aalim students.");
+  }
+  if (errors.length) return { errors };
+
   await connectDB();
 
   // Resolve the code: validate uniqueness if provided, else auto-generate.
@@ -312,15 +440,20 @@ export async function createStudent(
     studentCode = await generateStudentCode();
   }
 
+  const grade =
+    d.programme === "aalim" && yearValid ? `Year ${yearNum}` : "";
   const student = await StudentModel.create({
     studentCode,
     name: d.name,
-    grade: d.grade,
-    section: d.section,
+    grade,
     programme: d.programme,
+    year: d.programme === "aalim" && yearValid ? (yearNum as number) : null,
     subjects: [],
     active: true,
   });
+
+  // Auto-assign this class's subjects (each with its teacher).
+  await assignSubjectsForYear(String(student._id));
 
   if (d.createLogin === "on") {
     if (!EMAIL_RE.test(d.email)) {
@@ -361,40 +494,6 @@ export async function createStudent(
   redirect("/admin/students");
 }
 
-/**
- * Assign, per subject, which teacher teaches this student. Sent from the
- * student detail page: one select per subject named `subject:<subjectId>`.
- */
-export async function assignStudentSubjects(
-  formData: FormData,
-): Promise<AdminActionState> {
-  const { isAdmin } = await getRequestContext();
-  if (!isAdmin) return { errors: ["Not authorised."] };
-
-  const studentId = String(formData.get("studentId") ?? "");
-  if (!studentId) return { errors: ["Missing student id."] };
-
-  const assignments: { subject: string; teacher: string | null }[] = [];
-  for (const [key, value] of formData.entries()) {
-    if (!key.startsWith("subject:")) continue;
-    const subject = key.slice("subject:".length);
-    const teacher = String(value) || null;
-    assignments.push({ subject, teacher });
-  }
-
-  await connectDB();
-  const student = await StudentModel.findById(studentId);
-  if (!student) return { errors: ["Student not found."] };
-
-  student.subjects = assignments.map((a) => ({
-    subject: a.subject,
-    teacher: a.teacher,
-  }));
-  await student.save();
-
-  return { ok: true };
-}
-
 /* --------------------------------------------------------------------------
  * Student details update + deletion
  * ------------------------------------------------------------------------ */
@@ -411,8 +510,7 @@ export async function updateStudent(
       studentId: z.string().min(1, "Missing student id."),
       studentCode: z.string().trim().optional().default(""),
       name: z.string().trim().min(1, "Name is required."),
-      grade: z.string().trim().optional().default(""),
-      section: z.string().trim().optional().default(""),
+      year: z.string().trim().optional().default(""),
       programme: z.string().trim().optional().default(""),
     })
     .safeParse(Object.fromEntries(formData));
@@ -421,6 +519,22 @@ export async function updateStudent(
     return { errors: parsed.error.issues.map((i) => i.message) };
   }
   const d = parsed.data;
+
+  const yearNum = d.year ? Number(d.year) : undefined;
+  const yearValid =
+    yearNum !== undefined &&
+    Number.isInteger(yearNum) &&
+    yearNum >= 1 &&
+    yearNum <= 6;
+
+  const errors: string[] = [];
+  if (!PROGRAMMES.includes(d.programme as ProgrammeKey)) {
+    errors.push("Valid programme is required.");
+  }
+  if (d.programme === "aalim" && !yearValid) {
+    errors.push("Year (1–6) is required for Aalim students.");
+  }
+  if (errors.length) return { errors };
 
   await connectDB();
 
@@ -434,18 +548,23 @@ export async function updateStudent(
     }
   }
 
+  const grade =
+    d.programme === "aalim" && yearValid ? `Year ${yearNum}` : "";
   const student = await StudentModel.findByIdAndUpdate(
     d.studentId,
     {
       studentCode: d.studentCode || undefined,
       name: d.name,
-      grade: d.grade,
-      section: d.section,
+      grade,
+      year: d.programme === "aalim" && yearValid ? (yearNum as number) : null,
       programme: d.programme,
     },
     { new: true },
   );
   if (!student) return { errors: ["Student not found."] };
+
+  // Recompute subject assignments (e.g. when the year changes).
+  await assignSubjectsForYear(d.studentId);
 
   redirect(`/admin/students/${d.studentId}`);
 }

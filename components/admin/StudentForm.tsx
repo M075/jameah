@@ -7,6 +7,8 @@ const field =
   "w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900";
 const label = "block text-sm font-medium text-gray-700";
 
+const YEARS = [1, 2, 3, 4, 5, 6];
+
 export default function StudentForm() {
   const [state, formAction, pending] = useActionState<
     AdminActionState,
@@ -15,6 +17,7 @@ export default function StudentForm() {
   const [createLogin, setCreateLogin] = useState(false);
   const [loginMethod, setLoginMethod] = useState<"magic" | "password">("magic");
   const [showPassword, setShowPassword] = useState(false);
+  const [programme, setProgramme] = useState("");
 
   return (
     <form action={formAction} className="max-w-lg space-y-4">
@@ -36,27 +39,36 @@ export default function StudentForm() {
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className={label}>Class / year group</label>
-          <input name="grade" required className={field} placeholder="Year 1" />
+          <label className={label}>
+            Programme <span className="text-red-500">*</span>
+          </label>
+          <select
+            name="programme"
+            required
+            value={programme}
+            onChange={(e) => setProgramme(e.target.value)}
+            className={field}
+          >
+            <option value="">— select —</option>
+            <option value="hifz">Hifz</option>
+            <option value="aalim">Aalim</option>
+          </select>
         </div>
-        <div>
-          <label className={label}>Year</label>
-          <input name="section" className={field} placeholder="First, Second etc." />
-        </div>
-      </div>
-
-      <div>
-        <label className={label}>
-          Programme <span className="text-red-500">*</span>
-        </label>
-        <select name="programme" required defaultValue="" className={field}>
-          <option value="">— select —</option>
-          <option value="hifz">Hifz</option>
-          <option value="aalim">Aalim</option>
-        </select>
-        <p className="mt-1 text-xs text-gray-400">
-          Assign a teacher per subject on the student's page afterwards.
-        </p>
+        {programme === "aalim" ? (
+          <div>
+            <label className={label}>
+              Class / year <span className="text-red-500">*</span>
+            </label>
+            <select name="year" required className={field}>
+              <option value="">— select —</option>
+              {YEARS.map((y) => (
+                <option key={y} value={y}>
+                  Year {y}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-md border border-gray-200 p-3">

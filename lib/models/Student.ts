@@ -13,15 +13,18 @@ const studentSchema = new Schema(
     // (brief) window before generation without violating uniqueness.
     studentCode: { type: String, unique: true, trim: true, sparse: true },
     name: { type: String, required: true, trim: true },
-    // Programme / year group label, e.g. "Year 1", "Year 3".
+    // Programme / year group label, e.g. "Year 1". For Aalim it is
+    // auto-derived from `year` (e.g. "Year 3").
     grade: { type: String, default: "" },
-    section: { type: String, default: "" },
     // Which programme the student belongs to (drives available subjects).
     programme: {
       type: String,
       enum: PROGRAMMES,
       default: "",
     },
+    // The Aalim class/year this student is in (1–6). Null for Hifz,
+    // which has no subjects/classes. Drives automatic subject assignment.
+    year: { type: Number, default: null },
     // One teacher per subject. A student may have different teachers for
     // different subjects within their programme.
     subjects: {
@@ -45,6 +48,7 @@ export const StudentModel = models.Student || model("Student", studentSchema);
 export type StudentType = InferSchemaType<typeof studentSchema> & {
   _id: mongoose.Types.ObjectId;
   programme: ProgrammeKey;
+  year: number | null;
   subjects: { subject: mongoose.Types.ObjectId; teacher: mongoose.Types.ObjectId | null }[];
 };
 

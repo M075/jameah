@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   createSubject,
   updateSubject,
@@ -11,19 +11,35 @@ const field =
   "w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900";
 const label = "block text-sm font-medium text-gray-700";
 
+const YEARS = [1, 2, 3, 4, 5, 6];
+
+export interface TeacherOption {
+  _id: string;
+  name: string;
+}
+
 export default function SubjectForm({
   id,
   name = "",
-  type = "aalim",
+  type: initialType = "aalim",
+  year,
+  teacher = "",
+  teachers = [],
 }: {
   id?: string;
   name?: string;
   type?: "hifz" | "aalim";
+  year?: number | null;
+  teacher?: string;
+  teachers?: TeacherOption[];
 }) {
   const action = id ? updateSubject : createSubject;
   const [state, formAction, pending] = useActionState<AdminActionState, FormData>(
     action,
     {},
+  );
+  const [type, setType] = useState<"hifz" | "aalim">(
+    initialType as "hifz" | "aalim",
   );
 
   return (
@@ -43,14 +59,55 @@ export default function SubjectForm({
         />
       </div>
 
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={label}>
+            Type <span className="text-red-500">*</span>
+          </label>
+          <select
+            name="type"
+            value={type}
+            onChange={(e) => setType(e.target.value as "hifz" | "aalim")}
+            className={field}
+          >
+            <option value="aalim">Aalim</option>
+            <option value="hifz">Hifz</option>
+          </select>
+        </div>
+        <div>
+          <label className={label}>
+            Year / class <span className="text-red-500">*</span>
+          </label>
+          <select
+            name="year"
+            defaultValue={year ? String(year) : ""}
+            required
+            className={field}
+          >
+            <option value="">— select —</option>
+            {YEARS.map((y) => (
+              <option key={y} value={y}>
+                Year {y}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       <div>
-        <label className={label}>
-          Type <span className="text-red-500">*</span>
-        </label>
-        <select name="type" defaultValue={type} className={field}>
-          <option value="aalim">Aalim</option>
-          <option value="hifz">Hifz</option>
+        <label className={label}>Teacher</label>
+        <select name="teacher" defaultValue={teacher} className={field}>
+          <option value="">— unassigned —</option>
+          {teachers.map((t) => (
+            <option key={t._id} value={t._id}>
+              {t.name}
+            </option>
+          ))}
         </select>
+        <p className="mt-1 text-xs text-gray-400">
+          Assigned by admin. The teacher sees every student in this
+          subject&apos;s year.
+        </p>
       </div>
 
       {state.errors ? (

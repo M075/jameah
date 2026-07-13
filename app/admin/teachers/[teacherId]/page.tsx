@@ -22,9 +22,7 @@ export default async function EditTeacherPage({
   await getRequestContext();
   await connectDB();
 
-  const teacher = await TeacherModel.findById(teacherId)
-    .populate("subjects")
-    .lean<TeacherType>();
+  const teacher = await TeacherModel.findById(teacherId).lean<TeacherType>();
   if (!teacher) notFound();
 
   // Linked login account (if this teacher was given one) — so we can show
@@ -33,7 +31,10 @@ export default async function EditTeacherPage({
     .lean<UserType>()
     .select("email");
 
-  const subjects = await SubjectModel.find().sort({ name: 1 }).lean();
+  // Subjects this teacher is assigned to (via each subject's teacher field).
+  const taught = await SubjectModel.find({ teacher: teacherId })
+    .sort({ year: 1, name: 1 })
+    .lean<SubjectType[]>();
 
   return (
     <div>
@@ -52,15 +53,30 @@ export default async function EditTeacherPage({
           name={teacher.name}
           type={teacher.type}
           email={loginUser?.email ?? ""}
-          assigned={(teacher.subjects as { _id: unknown }[]).map((s) =>
-            String(s._id),
-          )}
-          subjects={(subjects as SubjectType[]).map((s) => ({
-            _id: String(s._id),
-            name: s.name,
-            type: s.type,
-          }))}
         />
+      </div>
+
+      <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
+        <h2 className="text-sm font-semibold text-emerald-900">
+          Subjects taught
+        </h2>
+        {taught.length > 0 ? (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {taught.map((s) => (
+              <li
+                key={String(s._id)}
+                className="rounded-full bg-emerald-50 px-3 py-1 text-sm text-emerald-800"
+              >
+                {s.name} · Year {s.year}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-gray-400">
+            No subjects assigned yet. Assign this teacher from each subject&apos;s
+            edit page.
+          </p>
+        )}
       </div>
 
       <div className="mt-6 rounded-xl border border-red-200 bg-white p-6">

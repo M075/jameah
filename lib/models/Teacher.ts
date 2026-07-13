@@ -15,8 +15,6 @@ const teacherSchema = new Schema(
       enum: PROGRAMMES,
       required: true,
     },
-    // Subjects (within their programme) this teacher is assigned to teach.
-    subjects: { type: [{ type: Schema.Types.ObjectId, ref: "Subject" }], default: [] },
     userId: { type: Schema.Types.ObjectId, ref: "User", default: null },
     active: { type: Boolean, default: true },
   },

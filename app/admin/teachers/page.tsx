@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { connectDB } from "@/lib/db";
-import { TeacherModel, StudentModel } from "@/lib/models";
+import { TeacherModel, StudentModel, SubjectModel, type SubjectType } from "@/lib/models";
 import { getRequestContext } from "@/lib/auth/context";
 import { deleteTeacher } from "@/app/admin/actions";
 
@@ -9,9 +9,19 @@ export default async function AdminTeachersPage() {
   await connectDB();
 
   const teachers = await TeacherModel.find()
-    .populate("subjects")
     .sort({ name: 1 })
     .lean();
+  // Subjects are owned by the Subject (each has a teacher), so derive each
+  // teacher's subject list rather than reading a denormalised array.
+  const subjects = await SubjectModel.find().lean<SubjectType[]>();
+  const subjectsByTeacher = new Map<string, string[]>();
+  for (const s of subjects) {
+    if (!s.teacher) continue;
+    const key = String(s.teacher);
+    const list = subjectsByTeacher.get(key) ?? [];
+    list.push(s.name);
+    subjectsByTeacher.set(key, list);
+  }
   const studentCounts = await StudentModel.aggregate([
     { $unwind: "$subjects" },
     { $group: { _id: "$subjects.teacher", count: { $sum: 1 } } },

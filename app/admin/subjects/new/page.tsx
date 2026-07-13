@@ -1,7 +1,14 @@
 import Link from "next/link";
+import { connectDB } from "@/lib/db";
+import { TeacherModel, type TeacherType } from "@/lib/models";
 import SubjectForm from "@/components/admin/SubjectForm";
 
-export default function NewSubjectPage() {
+export default async function NewSubjectPage() {
+  await connectDB();
+  const teachers = await TeacherModel.find({ type: "aalim" })
+    .sort({ name: 1 })
+    .lean<TeacherType[]>();
+
   return (
     <div>
       <Link
@@ -14,11 +21,16 @@ export default function NewSubjectPage() {
         Add subject
       </h1>
       <p className="mt-1 text-sm text-gray-600">
-        Create a subject and tag it as Hifz or Aalim. Teachers are assigned to
-        subjects from the teacher page.
+        Create a subject, choose its Aalim year, and assign the teacher who
+        teaches it. Students in that year are assigned the subject automatically.
       </p>
       <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
-        <SubjectForm />
+        <SubjectForm
+          teachers={teachers.map((t) => ({
+            _id: String(t._id),
+            name: t.name,
+          }))}
+        />
       </div>
     </div>
   );
