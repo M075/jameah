@@ -5,6 +5,7 @@ import { z } from "zod";
 // Type-only import — erased at compile time, so mongoose is NOT pulled into
 // the edge middleware that imports this module.
 import type { Role } from "@/lib/models";
+import { verifyMagicToken } from "@/lib/auth/magicToken";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -50,9 +51,40 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           .lean();
 
         if (!user) return null;
+        // Passwordless (magic-link) accounts have no passwordHash.
+        if (!user.passwordHash) return null;
 
         const valid = await bcrypt.compare(password, user.passwordHash);
         if (!valid) return null;
+
+        const role = user.role as Role;
+        return {
+          id: user._id.toString(),
+          email: user.email,
+          name: user.name,
+          role,
+        };
+      },
+    }),
+    Credentials({
+      id: "magic",
+      name: "Magic Link",
+      credentials: {
+        token: { label: "Token", type: "text" },
+      },
+      authorize: async (raw) => {
+        const token = typeof raw?.token === "string" ? raw.token : "";
+        if (!token) return null;
+
+        const claims = await verifyMagicToken(token);
+        if (!claims) return null;
+
+        const { connectDB } = await import("@/lib/db");
+        const { UserModel } = await import("@/lib/models");
+
+        await connectDB();
+        const user = await UserModel.findById(claims.sub).lean();
+        if (!user) return null;
 
         const role = user.role as Role;
         return {

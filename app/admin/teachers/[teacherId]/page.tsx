@@ -3,9 +3,11 @@ import { notFound } from "next/navigation";
 import { connectDB } from "@/lib/db";
 import {
   TeacherModel,
+  UserModel,
   SubjectModel,
   type SubjectType,
   type TeacherType,
+  type UserType,
 } from "@/lib/models";
 import { getRequestContext } from "@/lib/auth/context";
 import TeacherForm from "@/components/admin/TeacherForm";
@@ -25,6 +27,12 @@ export default async function EditTeacherPage({
     .lean<TeacherType>();
   if (!teacher) notFound();
 
+  // Linked login account (if this teacher was given one) — so we can show
+  // and edit the email rather than starting from a blank field.
+  const loginUser = await UserModel.findOne({ teacherId })
+    .lean<UserType>()
+    .select("email");
+
   const subjects = await SubjectModel.find().sort({ name: 1 }).lean();
 
   return (
@@ -43,6 +51,7 @@ export default async function EditTeacherPage({
           id={String(teacher._id)}
           name={teacher.name}
           type={teacher.type}
+          email={loginUser?.email ?? ""}
           assigned={(teacher.subjects as { _id: unknown }[]).map((s) =>
             String(s._id),
           )}

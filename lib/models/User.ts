@@ -19,7 +19,8 @@ const userSchema = new Schema(
       trim: true,
     },
     // Hashed with bcryptjs. select:false so it is never returned by default.
-    passwordHash: { type: String, required: true, select: false },
+    // Optional: accounts created via a magic-link login have no password.
+    passwordHash: { type: String, required: false, select: false },
     role: { type: String, enum: ROLES, required: true },
     // Links to the person profile this login belongs to (if any).
     studentId: { type: Schema.Types.ObjectId, ref: "Student", default: null },

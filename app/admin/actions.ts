@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
@@ -16,6 +17,8 @@ import {
   type ProgrammeKey,
 } from "@/lib/models";
 import { getRequestContext } from "@/lib/auth/context";
+import { signMagicToken } from "@/lib/auth/magicToken";
+import { sendLoginEmail } from "@/lib/email/sendEmail";
 
 export interface AdminActionState {
   ok?: boolean;
@@ -35,6 +38,35 @@ async function generateStudentCode(): Promise<string> {
       return candidate;
     }
     n += 1;
+  }
+}
+
+/** Resolve the public origin (scheme + host) so magic-link emails point here. */
+async function getOrigin(): Promise<string> {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const proto =
+    h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
+/**
+ * Build a signed magic-link token for `userId` and email it. Failures are
+ * logged, never thrown, so creating the account always succeeds even if the
+ * mail provider is misconfigured.
+ */
+async function sendMagicLoginEmail(
+  email: string,
+  name: string,
+  userId: string,
+  role: Role,
+): Promise<void> {
+  try {
+    const token = await signMagicToken({ sub: userId, email, role });
+    const url = `${await getOrigin()}/login/magic?token=${encodeURIComponent(token)}`;
+    await sendLoginEmail({ to: email, name, url });
+  } catch (err) {
+    console.error("Failed to send magic login email:", err);
   }
 }
 
@@ -164,23 +196,59 @@ async function upsertTeacher(
     if (!EMAIL_RE.test(email)) {
       return { errors: ["A valid email is required to create a login."] };
     }
-    if (password.length < 8) {
-      return { errors: ["Password must be at least 8 characters."] };
-    }
     const lower = email.toLowerCase();
-    if (await UserModel.findOne({ email: lower })) {
-      return { errors: [`A user with email ${lower} already exists.`] };
+
+    // If this teacher already has a linked login, update it rather than
+    // creating a duplicate (which would fail on the unique email index).
+    const existingUser = teacherId
+      ? await UserModel.findOne({ teacherId }).lean()
+      : null;
+
+    if (existingUser) {
+      if (existingUser.email !== lower) {
+        if (
+          await UserModel.findOne({
+            email: lower,
+            _id: { $ne: existingUser._id },
+          })
+        ) {
+          return { errors: [`A user with email ${lower} already exists.`] };
+        }
+      }
+      await UserModel.findByIdAndUpdate(existingUser._id, {
+        name,
+        email: lower,
+      });
+    } else {
+      if (await UserModel.findOne({ email: lower })) {
+        return { errors: [`A user with email ${lower} already exists.`] };
+      }
+      const loginMethod = String(formData.get("loginMethod") ?? "magic");
+      let user;
+      if (loginMethod === "password") {
+        if (password.length < 8) {
+          return { errors: ["Password must be at least 8 characters."] };
+        }
+        user = await UserModel.create({
+          name,
+          email: lower,
+          passwordHash: await bcrypt.hash(password, 10),
+          role: "teacher" as Role,
+          teacherId,
+          studentId: null,
+        });
+      } else {
+        user = await UserModel.create({
+          name,
+          email: lower,
+          role: "teacher" as Role,
+          teacherId,
+          studentId: null,
+        });
+        await sendMagicLoginEmail(lower, name, String(user._id), "teacher");
+      }
+      await TeacherModel.findByIdAndUpdate(teacherId, { userId: user._id });
     }
-    const passwordHash = await bcrypt.hash(password, 10);
-    const user = await UserModel.create({
-      name,
-      email: lower,
-      passwordHash,
-      role: "teacher" as Role,
-      teacherId,
-      studentId: null,
-    });
-    await TeacherModel.findByIdAndUpdate(teacherId, { userId: user._id });
   }
 
   redirect(teacherId ? `/admin/teachers/${teacherId}` : "/admin/teachers");
@@ -221,6 +289,7 @@ export async function createStudent(
       section: z.string().trim().optional().default(""),
       programme: z.string().trim().optional().default(""),
       createLogin: z.string().optional(),
+      loginMethod: z.string().optional().default("magic"),
       email: z.string().trim().optional().default(""),
       password: z.string().optional().default(""),
     })
@@ -257,22 +326,34 @@ export async function createStudent(
     if (!EMAIL_RE.test(d.email)) {
       return { errors: ["A valid email is required to create a login."] };
     }
-    if (!d.password || d.password.length < 8) {
-      return { errors: ["Password must be at least 8 characters."] };
-    }
     const email = d.email.toLowerCase();
     if (await UserModel.findOne({ email })) {
       return { errors: [`A user with email ${email} already exists.`] };
     }
-    const passwordHash = await bcrypt.hash(d.password, 10);
-    const user = await UserModel.create({
-      name: d.name,
-      email,
-      passwordHash,
-      role: "student" as Role,
-      studentId: student._id,
-      teacherId: null,
-    });
+    const loginMethod = d.loginMethod === "password" ? "password" : "magic";
+    let user;
+    if (loginMethod === "password") {
+      if (!d.password || d.password.length < 8) {
+        return { errors: ["Password must be at least 8 characters."] };
+      }
+      user = await UserModel.create({
+        name: d.name,
+        email,
+        passwordHash: await bcrypt.hash(d.password, 10),
+        role: "student" as Role,
+        studentId: student._id,
+        teacherId: null,
+      });
+    } else {
+      user = await UserModel.create({
+        name: d.name,
+        email,
+        role: "student" as Role,
+        studentId: student._id,
+        teacherId: null,
+      });
+      await sendMagicLoginEmail(email, d.name, String(user._id), "student");
+    }
     student.userId = user._id;
     await student.save();
   }
