@@ -63,8 +63,8 @@ export default function TeacherForm({
           onChange={(e) => setType(e.target.value as "hifz" | "aalim")}
           className={field}
         >
-          <option value="hifz">hifz</option>
-          <option value="aalim">aalim</option>
+          <option value="hifz">Hifz</option>
+          <option value="aalim">Aalim</option>
         </select>
       </div>
 
