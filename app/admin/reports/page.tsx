@@ -33,12 +33,11 @@ export default async function AdminReportsPage({
   if (status) filter.status = status;
 
   const [students, terms, reports] = await Promise.all([
-    StudentModel.find().sort({ studentCode: 1 }).lean<StudentType[]>(),
+    StudentModel.find().sort({ name: 1 }).lean<StudentType[]>(),
     TermModel.find().sort({ startDate: -1 }).lean<TermType[]>(),
     ReportModel.find(filter)
       .populate("student")
       .populate("term")
-      .populate("subject")
       .sort({ createdAt: -1 })
       .lean(),
   ]);
@@ -72,7 +71,7 @@ export default async function AdminReportsPage({
             <option value="">All students</option>
             {students.map((s) => (
               <option key={String(s._id)} value={String(s._id)}>
-                {s.studentCode} · {s.name}
+                {s.name}
               </option>
             ))}
           </select>
@@ -126,7 +125,6 @@ export default async function AdminReportsPage({
             <tr>
               <th className="px-4 py-2 font-medium">Student</th>
               <th className="px-4 py-2 font-medium">Term</th>
-              <th className="px-4 py-2 font-medium">Subject</th>
               <th className="px-4 py-2 font-medium">Status</th>
               <th className="px-4 py-2 font-medium text-right">Action</th>
             </tr>
@@ -139,21 +137,14 @@ export default async function AdminReportsPage({
               const tm =
                 termMap.get(String(r.term)) ??
                 (r.term as unknown as TermType);
-              const subj = r.subject as unknown as { _id: string; name: string };
               const isPublished = r.status === "published";
               return (
                 <tr key={String(r._id)} className="hover:bg-emerald-50/40">
                   <td className="px-4 py-2 font-medium text-gray-800">
                     {st?.name ?? "Student"}
-                    <span className="block font-mono text-xs text-gray-400">
-                      {st?.studentCode}
-                    </span>
                   </td>
                   <td className="px-4 py-2 text-gray-600">
                     {tm ? `${tm.name} ${tm.academicYear}` : "—"}
-                  </td>
-                  <td className="px-4 py-2 text-gray-600">
-                    {subj?.name ?? "Subject"}
                   </td>
                   <td className="px-4 py-2">
                     <span
@@ -175,7 +166,7 @@ export default async function AdminReportsPage({
                         View
                       </Link>
                       <Link
-                        href={`/teacher/students/${docId(r.student)}/edit?term=${docId(r.term)}&subject=${String(subj?._id)}`}
+                        href={`/admin/students/${docId(r.student)}/marks?term=${docId(r.term)}`}
                         className="rounded-md border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100"
                       >
                         Edit
@@ -201,7 +192,7 @@ export default async function AdminReportsPage({
             {reports.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={4}
                   className="px-4 py-6 text-center text-gray-400"
                 >
                   No reports yet.

@@ -4,7 +4,6 @@ import {
   StudentModel,
   ReportModel,
   TermModel,
-  SubjectModel,
 } from "@/lib/models";
 import { getRequestContext } from "@/lib/auth/context";
 
@@ -45,7 +44,6 @@ export default async function StudentDashboard() {
 
   const reports = await ReportModel.find({ student: student._id })
     .populate({ path: "term", model: TermModel })
-    .populate({ path: "subject", model: SubjectModel })
     .sort({ createdAt: -1 })
     .lean();
 
@@ -53,13 +51,12 @@ export default async function StudentDashboard() {
     <div>
       <h1 className="text-xl font-semibold text-emerald-900">My Reports</h1>
       <p className="mt-1 text-sm text-gray-600">
-        {student.name} ({student.studentCode})
+        {student.name}
       </p>
 
       <div className="mt-6 space-y-3">
         {reports.map((r) => {
           const term = r.term as unknown as { name: string; academicYear: string };
-          const subject = r.subject as unknown as { name: string };
           const isPublished = r.status === "published";
           return (
             <Link
@@ -69,10 +66,10 @@ export default async function StudentDashboard() {
             >
               <div>
                 <div className="font-medium text-emerald-800">
-                  {subject?.name ?? "Report"}
+                  {term?.name ?? "Term"} Report
                 </div>
                 <div className="text-xs text-gray-500">
-                  {term?.name} {term?.academicYear}
+                  {term?.academicYear} · all subjects
                 </div>
               </div>
               <span

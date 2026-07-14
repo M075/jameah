@@ -74,9 +74,8 @@ export default async function AdminTeachersPage() {
                   </span>
                 </td>
                 <td className="px-4 py-2 text-gray-600">
-                  {(t.subjects as { name: string }[])
-                    .map((s) => s.name)
-                    .join(", ") || "—"}
+                  {(subjectsByTeacher.get(String(t._id)) ?? []).join(", ") ||
+                    "—"}
                 </td>
                 <td className="px-4 py-2 text-right text-gray-600">
                   {countMap.get(String(t._id)) ?? 0}

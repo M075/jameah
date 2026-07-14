@@ -31,7 +31,7 @@ export async function GET(
 
   const buffer = await renderToBuffer(createElement(ReportPdf, { ctx }) as any);
 
-  const filename = `report-${ctx.student?.studentCode ?? "student"}.pdf`;
+  const filename = `report-${ctx.student?.name ?? "student"}.pdf`;
   return new Response(buffer as unknown as BodyInit, {
     headers: {
       "Content-Type": "application/pdf",

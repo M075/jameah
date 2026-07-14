@@ -9,7 +9,7 @@ export default async function TeacherDashboard() {
 
   const filter = isAdmin || !teacher ? {} : { "subjects.teacher": teacher._id };
   const students = await StudentModel.find(filter)
-    .sort({ studentCode: 1 })
+    .sort({ name: 1 })
     .lean();
 
   const terms = await TermModel.find().sort({ startDate: -1 }).lean();
@@ -23,11 +23,10 @@ export default async function TeacherDashboard() {
         {activeTerm ? ` · Term: ${activeTerm.name} ${activeTerm.academicYear}` : ""}
       </p>
 
-      <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white">
-        <table className="w-full text-sm">
+      <div className="mt-6 overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <table className="min-w-[480px] w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-500">
             <tr>
-              <th className="px-4 py-2 font-medium">Code</th>
               <th className="px-4 py-2 font-medium">Name</th>
               <th className="px-4 py-2 font-medium">Grade</th>
               <th className="px-4 py-2 font-medium text-right">Action</th>
@@ -36,9 +35,6 @@ export default async function TeacherDashboard() {
           <tbody className="divide-y divide-gray-100">
             {students.map((s) => (
               <tr key={String(s._id)} className="hover:bg-emerald-50/40">
-                <td className="px-4 py-2 font-mono text-xs text-gray-500">
-                  {s.studentCode}
-                </td>
                 <td className="px-4 py-2 font-medium text-gray-800">
                   {s.name}
                 </td>
@@ -56,7 +52,7 @@ export default async function TeacherDashboard() {
             {students.length === 0 ? (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={3}
                   className="px-4 py-6 text-center text-gray-400"
                 >
                   No students assigned yet.

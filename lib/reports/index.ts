@@ -9,6 +9,6 @@ export {
 export {
   buildReportTemplate,
   markFieldId,
-  conductFieldId,
+  remarksFieldId,
   type SubjectRef,
 } from "./templates";

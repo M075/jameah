@@ -1,68 +1,83 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { connectDB } from "@/lib/db";
 import {
   StudentModel,
   TermModel,
   ReportModel,
-  SubjectModel,
   type StudentType,
 } from "@/lib/models";
-import { buildReportTemplate, type ReportData } from "@/lib/reports";
+import type { SubjectRef } from "@/lib/reports";
 import { getRequestContext } from "@/lib/auth/context";
 import MarkEntryForm from "./mark-entry-form";
+
+/** Read {id, name} from a student.subjects entry (populated or bare ObjectId). */
+function subjectRef(entry: {
+  subject: unknown;
+  teacher: unknown;
+}): SubjectRef & { teacherId: string | null } {
+  const sub = entry.subject as
+    | { _id?: unknown; name?: string }
+    | string
+    | null
+    | undefined;
+  const id =
+    sub && typeof sub === "object" && "_id" in sub
+      ? String(sub._id)
+      : String(sub);
+  const name =
+    sub && typeof sub === "object" && "name" in sub
+      ? (sub.name ?? "Subject")
+      : "Subject";
+  const teach = entry.teacher as { _id?: unknown } | string | null | undefined;
+  const teacherId =
+    teach && typeof teach === "object" && "_id" in teach
+      ? String(teach._id)
+      : teach
+        ? String(teach)
+        : null;
+  return { id, name, teacherId };
+}
 
 export default async function EditReportPage({
   params,
   searchParams,
 }: {
   params: Promise<{ studentId: string }>;
-  searchParams: Promise<{ term?: string; subject?: string }>;
+  searchParams: Promise<{ term?: string }>;
 }) {
   const { studentId } = await params;
-  const { term, subject } = await searchParams;
-
-  if (!term || !subject) {
-    notFound();
-  }
+  const { term } = await searchParams;
 
   const { teacher, isAdmin } = await getRequestContext();
   await connectDB();
 
   const student = await StudentModel.findById(studentId)
     .populate("subjects.subject")
+    .populate("subjects.teacher")
     .lean<StudentType>();
   if (!student) notFound();
 
-  // `s.subject` may be a populated doc or a bare ObjectId; read the id either
-  // way so the comparison against the `subject` query param is correct.
-  const subjectIdOf = (s: { subject: unknown }): string => {
-    const sub = s.subject as { _id?: unknown } | string | { toString(): string };
-    if (sub && typeof sub === "object" && "_id" in sub) {
-      return String((sub as { _id: unknown })._id);
-    }
-    return String(sub);
-  };
+  if (!term) redirect(`/teacher/students/${studentId}`);
 
-  const assignment = (student.subjects ?? []).find(
-    (s) => subjectIdOf(s) === subject,
-  );
-  if (!assignment) notFound();
-  if (!isAdmin && teacher && String(assignment.teacher) !== String(teacher._id)) {
-    notFound();
-  }
+  const termDoc = await TermModel.findById(term).lean();
+  if (!termDoc) notFound();
 
-  const [termDoc, subjectDoc, report] = await Promise.all([
-    TermModel.findById(term).lean(),
-    SubjectModel.findById(subject).lean(),
-    ReportModel.findOne({ student: studentId, term, subject }).lean(),
-  ]);
-  if (!termDoc || !subjectDoc) notFound();
+  // Subjects this caller may enter marks for.
+  const allRefs = (student.subjects ?? []).map(subjectRef);
+  const editable = isAdmin
+    ? allRefs
+    : allRefs.filter(
+        (s) => teacher && s.teacherId && s.teacherId === String(teacher._id),
+      );
+  if (editable.length === 0) notFound();
 
-  const tmpl = buildReportTemplate(subjectDoc.type, [
-    { id: String(subjectDoc._id), name: subjectDoc.name },
-  ]);
-  const initialData = (report?.data ?? {}) as ReportData;
+  const report = await ReportModel.findOne({
+    student: studentId,
+    term,
+  }).lean();
+
+  const initialData = (report?.data ?? {}) as Record<string, string | number>;
 
   return (
     <div>
@@ -74,26 +89,25 @@ export default async function EditReportPage({
       </Link>
       <div className="mt-2 flex items-baseline justify-between">
         <h1 className="text-xl font-semibold text-emerald-900">
-          {subjectDoc.name}
+          Enter marks
         </h1>
         <span className="text-sm text-gray-500">
           {termDoc.name} {termDoc.academicYear}
         </span>
       </div>
       <p className="text-sm text-gray-600">
-        {student.name} ({student.studentCode})
-        {report
-          ? ` · current status: ${report.status}`
-          : " · new report"}
+        {student.name}
+        {report ? ` · current status: ${report.status}` : " · new report"}
       </p>
 
       <div className="mt-6">
         <MarkEntryForm
-          template={tmpl}
-          initialData={initialData}
           studentId={studentId}
           termId={term}
-          subjectId={subject}
+          programme={student.programme}
+          subjects={editable}
+          initialData={initialData}
+          returnUrl={`/teacher/students/${studentId}`}
         />
       </div>
     </div>

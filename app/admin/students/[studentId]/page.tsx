@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { connectDB } from "@/lib/db";
 import {
   StudentModel,
-  TermModel,
   ReportModel,
   type StudentType,
 } from "@/lib/models";
@@ -26,12 +25,8 @@ export default async function AdminStudentReportsPage({
     .lean<StudentType>();
   if (!student) notFound();
 
-  const terms = await TermModel.find().sort({ startDate: -1 }).lean();
-  const activeTerm = terms.find((t) => t.active) ?? terms[0];
-
   const reports = await ReportModel.find({ student: studentId })
     .populate("term")
-    .populate("subject")
     .sort({ createdAt: -1 })
     .lean();
 
@@ -47,8 +42,7 @@ export default async function AdminStudentReportsPage({
         {student.name}
       </h1>
       <p className="text-sm text-gray-600">
-        {student.studentCode}
-        {student.grade ? ` · ${student.grade}` : ""}
+        {student.grade ? `${student.grade}` : ""}
         {student.programme ? ` · ${student.programme === "hifz" ? "Hifz" : "Aalim"}` : ""}
       </p>
 
@@ -59,7 +53,6 @@ export default async function AdminStudentReportsPage({
         </h2>
         <StudentDetailsForm
           studentId={studentId}
-          studentCode={student.studentCode ?? ""}
           name={student.name}
           year={student.year ?? null}
           programme={student.programme ?? ""}
@@ -105,15 +98,12 @@ export default async function AdminStudentReportsPage({
         )}
       </div>
 
-      {/* Per-subject report cards */}
+      {/* Per-term report cards */}
       <div className="mt-6 space-y-3">
         {reports.map((r) => {
           const term = r.term as unknown as {
             name: string;
             academicYear: string;
-          };
-          const subject = r.subject as unknown as {
-            name: string;
             _id: string;
           };
           const isPublished = r.status === "published";
@@ -124,10 +114,10 @@ export default async function AdminStudentReportsPage({
             >
               <div>
                 <div className="font-medium text-emerald-800">
-                  {subject?.name ?? "Subject"}
+                  {term?.name ?? "Term"} {term?.academicYear}
                 </div>
                 <div className="text-xs text-gray-500">
-                  {term?.name} {term?.academicYear}
+                  All subjects consolidated
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -146,16 +136,14 @@ export default async function AdminStudentReportsPage({
                 >
                   View
                 </Link>
-                {activeTerm ? (
-                  <Link
-                    href={`/teacher/students/${studentId}/edit?term=${String(
-                      activeTerm._id,
-                    )}&subject=${String(subject?._id)}`}
-                    className="rounded-md border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100"
-                  >
-                    Edit
-                  </Link>
-                ) : null}
+                <Link
+                  href={`/admin/students/${studentId}/marks?term=${String(
+                    term?._id,
+                  )}`}
+                  className="rounded-md border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                >
+                  Edit
+                </Link>
               </div>
             </div>
           );

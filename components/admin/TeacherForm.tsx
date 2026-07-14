@@ -14,12 +14,12 @@ const label = "block text-sm font-medium text-gray-700";
 export default function TeacherForm({
   id,
   name = "",
-  type: initialType = "hifz",
+  type: initialType = "Aalim",
   email = "",
 }: {
   id?: string;
   name?: string;
-  type?: "hifz" | "aalim";
+  type?: "Hifz" | "Aalim";
   email?: string;
 }) {
   const action = id ? updateTeacher : createTeacher;
@@ -27,9 +27,13 @@ export default function TeacherForm({
     AdminActionState,
     FormData
   >(action, {});
-  const [type, setType] = useState<"hifz" | "aalim">(initialType);
+  const [type, setType] = useState<"Hifz" | "Aalim">(initialType);
   const [createLogin, setCreateLogin] = useState<boolean>(Boolean(email));
-  const [loginMethod, setLoginMethod] = useState<"magic" | "password">("magic");
+  // Default to "password" so the password field is visible out of the box — the
+  // user can switch to a magic link if they prefer. This avoids the case where
+  // someone opens the edit page to add a password but sees no password field.
+  const [loginMethod, setLoginMethod] =
+    useState<"magic" | "password">("password");
   const [showPassword, setShowPassword] = useState(false);
 
   return (
@@ -56,11 +60,11 @@ export default function TeacherForm({
         <select
           name="type"
           value={type}
-          onChange={(e) => setType(e.target.value as "hifz" | "aalim")}
+          onChange={(e) => setType(e.target.value as "Hifz" | "Aalim")}
           className={field}
         >
-          <option value="hifz">Hifz</option>
-          <option value="aalim">Aalim</option>
+          <option value="Hifz">Hifz</option>
+          <option value="Aalim">Aalim</option>
         </select>
       </div>
 
@@ -80,8 +84,7 @@ export default function TeacherForm({
           <div className="mt-3 grid gap-3">
             {email ? (
               <p className="text-xs text-gray-500">
-                This teacher already has a login. Saving updates the linked
-                email and name; it won&apos;t re-send a sign-in link.
+                This teacher has a login. 
               </p>
             ) : null}
             <div>
@@ -91,8 +94,9 @@ export default function TeacherForm({
                 name="email"
                 defaultValue={email}
                 className={field}
-                placeholder="teacher@jameah.edu"
+                placeholder="teacher@gmail.com"
               />
+
             </div>
             <fieldset className="border-0 p-0">
               <legend className={`${label} mb-1`}>Sign-in method</legend>
@@ -104,7 +108,7 @@ export default function TeacherForm({
                   checked={loginMethod === "magic"}
                   onChange={() => setLoginMethod("magic")}
                 />
-                Email a magic sign-in link (no password)
+                Email a sign-in link (no password required)
               </label>
               <label className="mt-1 flex items-center gap-2 text-sm text-gray-700">
                 <input

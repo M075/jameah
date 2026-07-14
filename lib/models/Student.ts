@@ -8,10 +8,6 @@ import { PROGRAMMES, type ProgrammeKey } from "./Subject";
 
 const studentSchema = new Schema(
   {
-    // Human-friendly unique code, e.g. "S-001". Optional on input — when left
-    // blank it is auto-generated (see createStudent). sparse allows the
-    // (brief) window before generation without violating uniqueness.
-    studentCode: { type: String, unique: true, trim: true, sparse: true },
     name: { type: String, required: true, trim: true },
     // Programme / year group label, e.g. "Year 1". For Aalim it is
     // auto-derived from `year` (e.g. "Year 3").

@@ -1,6 +1,5 @@
 import type { ProgrammeKey } from "@/lib/models";
 import type { ReportField, ReportTemplate } from "./types";
-import { GRADE_SCALE } from "./gradeScale";
 
 /** A subject as needed to build a report template. */
 export interface SubjectRef {
@@ -11,11 +10,10 @@ export interface SubjectRef {
 /**
  * Build a report template for a student's programme out of their assigned
  * subjects. Each subject contributes two fields:
- *   - `${subjectId}__mark`    : numeric mark out of 100 (score)
- *   - `${subjectId}__conduct` : qualitative conduct grade (dropdown)
- * plus a free-text remarks field. This single builder serves both the
- * teacher's per-subject mark entry (pass one subject) and the student's
- * combined term view (pass all subjects).
+ *   - `${subjectId}__mark`     : numeric mark out of 100 (score)
+ *   - `${subjectId}__remarks`  : free-text teacher remark
+ * The single builder serves both the teacher's per-term mark entry (pass the
+ * subjects they teach) and the student's combined term view (pass all subjects).
  */
 export function buildReportTemplate(
   programme: ProgrammeKey,
@@ -32,11 +30,10 @@ export function buildReportTemplate(
       hint: "Mark out of 100.",
     });
     fields.push({
-      id: `${s.id}__conduct`,
-      label: `${s.name} (conduct)`,
-      type: "grade",
-      options: GRADE_SCALE,
-      weight: 1,
+      id: `${s.id}__remarks`,
+      label: `${s.name} remark`,
+      type: "text",
+      hint: "Teacher's remark for this subject.",
     });
   }
 
@@ -47,29 +44,17 @@ export function buildReportTemplate(
     sections: [
       {
         id: "subjects",
-        title: "Subjects & Conduct",
+        title: "Subjects",
         fields,
-      },
-      {
-        id: "remarks",
-        title: "Remarks",
-        fields: [
-          {
-            id: "remarks",
-            label: "Teacher's remarks",
-            type: "text",
-            hint: "General feedback for the student and parents.",
-          },
-        ],
       },
     ],
   };
 }
 
-/** Field-id helpers for the `${subjectId}__mark` / `${subjectId}__conduct` scheme. */
+/** Field-id helpers for the `${subjectId}__mark` / `${subjectId}__remarks` scheme. */
 export function markFieldId(subjectId: string): string {
   return `${subjectId}__mark`;
 }
-export function conductFieldId(subjectId: string): string {
-  return `${subjectId}__conduct`;
+export function remarksFieldId(subjectId: string): string {
+  return `${subjectId}__remarks`;
 }

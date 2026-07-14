@@ -8,7 +8,7 @@ export default async function AdminStudentsPage() {
   await getRequestContext();
   await connectDB();
 
-  const students = await StudentModel.find().sort({ studentCode: 1 }).lean();
+  const students = await StudentModel.find().sort({ name: 1 }).lean();
 
   return (
     <div>
@@ -32,7 +32,6 @@ export default async function AdminStudentsPage() {
         <table className="min-w-[680px] w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-500">
             <tr>
-              <th className="px-4 py-2 font-medium">Code</th>
               <th className="px-4 py-2 font-medium">Name</th>
               <th className="px-4 py-2 font-medium">Grade</th>
               <th className="px-4 py-2 font-medium">Programme</th>
@@ -42,9 +41,6 @@ export default async function AdminStudentsPage() {
           <tbody className="divide-y divide-gray-100">
             {students.map((s) => (
               <tr key={String(s._id)} className="hover:bg-emerald-50/40">
-                <td className="px-4 py-2 font-mono text-xs text-gray-500">
-                  {s.studentCode}
-                </td>
                 <td className="px-4 py-2 font-medium text-gray-800">
                   {s.name}
                 </td>

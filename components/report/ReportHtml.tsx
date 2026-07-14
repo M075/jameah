@@ -1,21 +1,13 @@
 import type { ReportContext } from "@/lib/reports/loadReport";
-import type { ReportField } from "@/lib/reports";
+import { markFieldId, remarksFieldId } from "@/lib/reports";
 
-function displayValue(field: ReportField, value: unknown): string {
+function markDisplay(value: unknown): string {
   if (value === undefined || value === null || value === "") return "—";
-  if (field.type === "score") {
-    return `${value} / ${field.max ?? 100}`;
-  }
-  if (field.type === "grade") {
-    const opt = field.options?.find((o) => o.value === String(value));
-    return opt ? opt.label : String(value);
-  }
-  return String(value);
+  return `${value} / 100`;
 }
 
 export default function ReportHtml({ ctx }: { ctx: ReportContext }) {
-  const { report, student, term, teacher, subject, template, result, data } =
-    ctx;
+  const { student, term, template, result, data, subjects } = ctx;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-8 print:border-0 print:p-0">
@@ -24,8 +16,7 @@ export default function ReportHtml({ ctx }: { ctx: ReportContext }) {
           Jameah Mahmoodiyah Progress Report
         </h1>
         <p className="text-sm text-gray-500">
-          {subject?.name ?? template.label} — {term?.name}{" "}
-          {term?.academicYear}
+          {template.label} — {term?.name} {term?.academicYear}
         </p>
       </header>
 
@@ -34,14 +25,9 @@ export default function ReportHtml({ ctx }: { ctx: ReportContext }) {
           <dt className="text-gray-400">Student</dt>
           <dd className="font-medium text-gray-800">{student?.name}</dd>
         </div>
-        
         <div>
           <dt className="text-gray-400">Grade</dt>
           <dd className="font-medium text-gray-800">{student?.grade}</dd>
-        </div>
-        <div>
-          <dt className="text-gray-400">Teacher</dt>
-          <dd className="font-medium text-gray-800">{teacher?.name}</dd>
         </div>
         
       </dl>
@@ -66,44 +52,35 @@ export default function ReportHtml({ ctx }: { ctx: ReportContext }) {
         </div>
       </div>
 
-      {/* Sections */}
-      <div className="mt-6 space-y-5">
-        {template.sections.map((section) => {
-          const sectionResult = result.sections.find(
-            (s) => s.id === section.id,
-          );
-          const visibleFields = section.fields.filter(
-            (f) => f.type !== "text" || (data[f.id] && String(data[f.id]).trim()),
-          );
-          return (
-            <section key={section.id}>
-              <div className="flex items-center justify-between border-b border-gray-100 pb-1">
-                <h2 className="font-semibold text-gray-800">
-                  {section.title}
-                </h2>
-                {sectionResult?.percent !== null ? (
-                  <span className="text-sm font-medium text-gray-500">
-                    {sectionResult?.percent}%
+      {/* Subjects: name left, mark right, remark below */}
+      <div className="mt-6">
+        <h2 className="font-semibold text-gray-800">Subjects</h2>
+        <div className="mt-2 divide-y divide-gray-100">
+          {subjects.map((s) => {
+            const mark = data[markFieldId(s.id)];
+            const remark = data[remarksFieldId(s.id)];
+            return (
+              <div key={s.id} className="py-2.5">
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="font-medium text-gray-800">
+                    {s.teacher ? `${s.name} — ${s.teacher}` : s.name}
                   </span>
+                  <span className="font-medium text-gray-800">
+                    {markDisplay(mark)}
+                  </span>
+                </div>
+                {remark ? (
+                  <p className="mt-1 text-sm text-gray-600">{remark}</p>
                 ) : null}
               </div>
-              <table className="mt-2 w-full text-sm">
-                <tbody>
-                  {visibleFields.map((field) => (
-                    <tr key={field.id} className="border-b border-gray-50">
-                      <td className="py-1.5 pr-4 text-gray-600">
-                        {field.label}
-                      </td>
-                      <td className="py-1.5 text-right font-medium text-gray-800">
-                        {displayValue(field, data[field.id])}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-          );
-        })}
+            );
+          })}
+          {subjects.length === 0 ? (
+            <p className="py-3 text-sm text-gray-400">
+              No subjects assigned to this student.
+            </p>
+          ) : null}
+        </div>
       </div>
 
       <footer className="mt-8 border-t border-gray-200 pt-3 text-xs text-gray-400">

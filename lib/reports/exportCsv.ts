@@ -4,23 +4,20 @@ import {
   ReportModel,
   StudentModel,
   TermModel,
-  SubjectModel,
   type ReportType,
   type StudentType,
   type TermType,
-  type SubjectType,
 } from "@/lib/models";
 import {
   buildReportTemplate,
   markFieldId,
-  conductFieldId,
+  remarksFieldId,
   computeResult,
-  gradeOption,
   type ReportData,
+  type SubjectRef,
 } from "@/lib/reports";
 
 const FIXED_COLUMNS = [
-  "studentCode",
   "studentName",
   "grade",
   "term",
@@ -28,73 +25,84 @@ const FIXED_COLUMNS = [
   "subject",
   "status",
   "mark",
-  "conduct",
+  "remarks",
   "overallPercent",
   "gradeLetter",
   "publishedAt",
-  "remarks",
 ] as const;
 
+/** Resolve a student's assigned subjects into {id, name} refs. */
+function subjectRefsOf(student: StudentType | null): SubjectRef[] {
+  if (!student) return [];
+  return (student.subjects ?? []).map((entry) => {
+    const sub = entry.subject as
+      | { _id?: unknown; name?: string }
+      | string
+      | null
+      | undefined;
+    if (sub && typeof sub === "object" && "_id" in sub) {
+      return { id: String(sub._id), name: sub.name ?? "Subject" };
+    }
+    return { id: String(sub), name: "Subject" };
+  });
+}
+
 /**
- * Build a flattened CSV of every report. With one report per student + term +
- * subject, each row is one subject. Returns the CSV as a string so both the
- * CLI script and the admin API route can use it.
+ * Build a flattened CSV of every report. Each report is one student + term
+ * holding all subjects, so we emit one row per subject. Returns the CSV as a
+ * string so both the CLI script and the admin API route can use it.
  */
 export async function buildReportsCsv(): Promise<string> {
   await connectDB();
 
-  const [reports, students, terms, subjects] = await Promise.all([
-    ReportModel.find().sort({ createdAt: -1 }).lean<ReportType[]>(),
-    StudentModel.find().lean<StudentType[]>(),
+  const [reports, terms] = await Promise.all([
+    ReportModel.find()
+      .populate({
+        path: "student",
+        populate: { path: "subjects.subject" },
+      })
+      .populate("term")
+      .sort({ createdAt: -1 })
+      .lean<ReportType[]>(),
     TermModel.find().lean<TermType[]>(),
-    SubjectModel.find().lean<SubjectType[]>(),
   ]);
 
-  const studentMap = new Map(students.map((s) => [String(s._id), s]));
   const termMap = new Map(terms.map((t) => [String(t._id), t]));
-  const subjectMap = new Map(subjects.map((s) => [String(s._id), s]));
 
-  const rows = reports.map((r) => {
-    const student = studentMap.get(String(r.student));
+  const rows: Record<string, string>[] = [];
+  for (const r of reports) {
+    const student = r.student as unknown as StudentType | null;
+    if (!student) continue;
+
     const term = termMap.get(String(r.term));
-    const subject = subjectMap.get(String(r.subject));
     const data = (r.data ?? {}) as Record<string, string | number>;
+    const subjectRefs = subjectRefsOf(student);
+    const template = buildReportTemplate(student.programme, subjectRefs);
+    const result = computeResult(template, data);
+    const overall = String(result.percent ?? "");
+    const gradeLetter = result.grade;
+    const publishedAt = r.publishedAt
+      ? new Date(r.publishedAt).toISOString()
+      : "";
 
-    let mark = "";
-    let conduct = "";
-    let overall = "";
-    let gradeLetter = "";
-    if (subject) {
-      const template = buildReportTemplate(subject.type, [
-        { id: String(subject._id), name: subject.name },
-      ]);
-      const result = computeResult(template, data as ReportData);
-      const markId = markFieldId(String(subject._id));
-      const conductId = conductFieldId(String(subject._id));
-      mark = String(data[markId] ?? "");
-      const conductVal = String(data[conductId] ?? "");
-      conduct = gradeOption(conductVal)?.label ?? conductVal;
-      overall = String(result.percent ?? "");
-      gradeLetter = result.grade;
+    for (const s of subjectRefs) {
+      const mark = data[markFieldId(s.id)];
+      const remark = data[remarksFieldId(s.id)];
+      rows.push({
+        studentName: student.name ?? "",
+        grade: student.grade ?? "",
+        term: term?.name ?? "",
+        academicYear: term?.academicYear ?? "",
+        subject: s.name,
+        status: r.status,
+        mark: mark === undefined || mark === null ? "" : String(mark),
+        remarks: typeof remark === "string" ? remark : "",
+        overallPercent: overall,
+        gradeLetter,
+        publishedAt,
+      });
     }
-
-    return {
-      studentCode: student?.studentCode ?? "",
-      studentName: student?.name ?? "",
-      grade: student?.grade ?? "",
-      term: term?.name ?? "",
-      academicYear: term?.academicYear ?? "",
-      subject: subject?.name ?? "",
-      status: r.status,
-      mark,
-      conduct,
-      overallPercent: overall,
-      gradeLetter,
-      publishedAt: r.publishedAt ? new Date(r.publishedAt).toISOString() : "",
-      remarks:
-        typeof r.comments === "string" && r.comments ? r.comments : "",
-    };
-  });
+  }
 
   return stringify(rows, { header: true, columns: FIXED_COLUMNS });
 }

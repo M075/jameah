@@ -25,6 +25,7 @@ import {
   type Role,
   type ProgrammeKey,
 } from "../lib/models";
+import { markFieldId, remarksFieldId } from "../lib/reports";
 
 const DEFAULT_PASSWORD = "Password123!";
 
@@ -156,9 +157,8 @@ async function main() {
   const studentSubjects: Record<string, { subject: string; teacher: string | null }[]> = {};
   for (const [code, name, grade, programme, year, , withLogin] of studentDefs) {
     const student = await StudentModel.findOneAndUpdate(
-      { studentCode: code },
+      { name },
       {
-        studentCode: code,
         name,
         grade,
         programme,
@@ -204,39 +204,44 @@ async function main() {
     }
   }
 
-  // --- Sample per-subject reports ------------------------------------------
-  // Give the two students with logins a published report for every subject.
+  // --- Sample per-term reports ----------------------------------------
+  // One consolidated published report per student+term holding every subject's
+  // mark + remark. Only the two students with logins get sample data.
+  const SAMPLE_MARKS = [82, 76, 91, 68, 88, 73];
+  const SAMPLE_REMARKS = [
+    "Strong recitation; keep practising tajweed.",
+    "Good grasp of fiqh principles.",
+    "Excellent memorisation and understanding.",
+    "Needs to participate more in class.",
+    "Consistent and diligent work this term.",
+    "Improving steadily; encourage revision.",
+  ];
   for (const code of ["S-001", "S-004"]) {
     const studentId = studentIds[code];
-    for (const entry of studentSubjects[code]) {
-      const subject = await SubjectModel.findById(entry.subject).lean();
-      const data = {
-        subject: subject?.name ?? "Subject",
-        marks: [
-          { label: "Participation", value: 8 },
-          { label: "Homework", value: 16 },
-          { label: "Exam", value: 60 },
-        ],
-        total: 84,
-        grade: "B",
-        comments: "A consistent and diligent student. Keep up the good work.",
-      };
-      await ReportModel.findOneAndUpdate(
-        { student: studentId, term: term._id, subject: entry.subject },
-        {
-          student: studentId,
-          term: term._id,
-          subject: entry.subject,
-          teacher: entry.teacher,
-          status: "published",
-          data,
-          comments: data.comments,
-          publishedAt: new Date(),
-        },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
-      );
-    }
-    console.log(`Sample reports (published): ${code} — all subjects`);
+    const entries = studentSubjects[code];
+    if (!entries || entries.length === 0) continue;
+
+    const data: Record<string, string | number> = {};
+    entries.forEach((entry, i) => {
+      data[markFieldId(entry.subject)] =
+        SAMPLE_MARKS[i % SAMPLE_MARKS.length];
+      data[remarksFieldId(entry.subject)] =
+        SAMPLE_REMARKS[i % SAMPLE_REMARKS.length];
+    });
+
+    await ReportModel.findOneAndUpdate(
+      { student: studentId, term: term._id },
+      {
+        student: studentId,
+        term: term._id,
+        teacher: entries[0].teacher,
+        status: "published",
+        data,
+        publishedAt: new Date(),
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+    console.log(`Sample report (published): ${code} — all subjects`);
   }
 
   console.log("\nSeed complete.");

@@ -15,7 +15,7 @@ export default async function MagicLoginPage({
       <div
         className="relative flex min-h-screen items-center justify-center px-4 py-10"
         style={{
-          backgroundImage: "url('/madrasa.webp')",
+          backgroundImage: "url('https://www.advantour.com/img/uzbekistan/bukhara/kosh-madrasah/kosh-madrasah.jpg')",
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
@@ -46,7 +46,7 @@ export default async function MagicLoginPage({
     <div
       className="relative flex min-h-screen items-center justify-center px-4 py-10"
       style={{
-        backgroundImage: "url('/madrasa.webp')",
+        backgroundImage: "url('https://www.advantour.com/img/uzbekistan/bukhara/kosh-madrasah/kosh-madrasah.jpg')",
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",

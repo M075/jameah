@@ -21,27 +21,22 @@ const reportSchema = new Schema(
       default: null,
     },
     term: { type: Schema.Types.ObjectId, ref: "Term", required: true },
-    // The subject this report covers (replaces the old template field).
-    subject: {
-      type: Schema.Types.ObjectId,
-      ref: "Subject",
-      required: true,
-    },
     status: {
       type: String,
       enum: REPORT_STATUSES,
       default: "draft",
     },
     // Scored values keyed by field ids derived from buildReportTemplate.
+    // Each assigned subject contributes `${subjectId}__mark` (score) and
+    // `${subjectId}__remarks` (text). One document holds the whole term.
     data: { type: Schema.Types.Mixed, default: {} },
-    comments: { type: String, default: "" },
     publishedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );
 
-// One published/draft report per student + term + subject combination.
-reportSchema.index({ student: 1, term: 1, subject: 1 }, { unique: true });
+// One report per student + term, consolidating every subject.
+reportSchema.index({ student: 1, term: 1 }, { unique: true });
 
 export const ReportModel = models.Report || model("Report", reportSchema);
 

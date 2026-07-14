@@ -6,16 +6,11 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer";
 import type { ReportContext } from "@/lib/reports/loadReport";
-import type { ReportField } from "@/lib/reports";
+import { markFieldId, remarksFieldId } from "@/lib/reports";
 
-function displayValue(field: ReportField, value: unknown): string {
+function markDisplay(value: unknown): string {
   if (value === undefined || value === null || value === "") return "—";
-  if (field.type === "score") return `${value} / ${field.max ?? 100}`;
-  if (field.type === "grade") {
-    const opt = field.options?.find((o) => o.value === String(value));
-    return opt ? opt.label : String(value);
-  }
-  return String(value);
+  return `${value} / 100`;
 }
 
 const styles = StyleSheet.create({
@@ -37,24 +32,21 @@ const styles = StyleSheet.create({
   summaryCell: { width: "50%", alignItems: "center" },
   summaryLabel: { fontSize: 8, color: "#047857" },
   summaryValue: { fontSize: 20, fontFamily: "Helvetica-Bold", color: "#064e3b" },
-  section: { marginBottom: 10 },
-  sectionHead: {
+  sectionTitle: {
+    fontSize: 12,
+    fontFamily: "Helvetica-Bold",
+    color: "#1f2937",
+    marginBottom: 4,
+  },
+  subjectRow: { marginBottom: 4 },
+  subjectHead: {
     flexDirection: "row",
     justifyContent: "space-between",
-    borderBottom: "1pt solid #f3f4f6",
-    paddingBottom: 2,
-    marginBottom: 2,
   },
-  sectionTitle: { fontSize: 11, fontFamily: "Helvetica-Bold", color: "#1f2937" },
-  sectionPercent: { fontSize: 10, color: "#6b7280" },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    borderBottom: "1pt solid #f9fafb",
-    paddingVertical: 2,
-  },
-  rowLabel: { color: "#4b5563" },
-  rowValue: { fontFamily: "Helvetica-Bold", color: "#1f2937" },
+  subjectName: { fontSize: 10, fontFamily: "Helvetica-Bold", color: "#1f2937" },
+  subjectMark: { fontSize: 10, fontFamily: "Helvetica-Bold", color: "#1f2937" },
+  remarkText: { fontSize: 9, color: "#6b7280", marginTop: 2 },
+  empty: { fontSize: 9, color: "#9ca3af", marginTop: 2 },
   footer: {
     position: "absolute",
     bottom: 24,
@@ -68,17 +60,15 @@ const styles = StyleSheet.create({
 });
 
 export default function ReportPdf({ ctx }: { ctx: ReportContext }) {
-  const { report, student, term, teacher, subject, template, result, data } =
-    ctx;
+  const { student, term, template, result, data, subjects } = ctx;
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
-          <Text style={styles.title}>Jameah · Islamic Institute</Text>
+          <Text style={styles.title}>Jameah Mahmoodiyah Progress Report</Text>
           <Text style={styles.subtitle}>
-            {subject?.name ?? template.label} — {term?.name}{" "}
-            {term?.academicYear}
+            {template.label} — {term?.name} {term?.academicYear}
           </Text>
         </View>
 
@@ -88,20 +78,8 @@ export default function ReportPdf({ ctx }: { ctx: ReportContext }) {
             <Text style={styles.infoValue}>{student?.name}</Text>
           </View>
           <View style={styles.infoCell}>
-            <Text style={styles.infoLabel}>CODE</Text>
-            <Text style={styles.infoValue}>{student?.studentCode}</Text>
-          </View>
-          <View style={styles.infoCell}>
             <Text style={styles.infoLabel}>GRADE</Text>
             <Text style={styles.infoValue}>{student?.grade || "—"}</Text>
-          </View>
-          <View style={styles.infoCell}>
-            <Text style={styles.infoLabel}>TEACHER</Text>
-            <Text style={styles.infoValue}>{teacher?.name}</Text>
-          </View>
-          <View style={styles.infoCell}>
-            <Text style={styles.infoLabel}>STATUS</Text>
-            <Text style={styles.infoValue}>{report.status}</Text>
           </View>
         </View>
 
@@ -118,35 +96,31 @@ export default function ReportPdf({ ctx }: { ctx: ReportContext }) {
           </View>
         </View>
 
-        {template.sections.map((section) => {
-          const sectionResult = result.sections.find((s) => s.id === section.id);
-          const visibleFields = section.fields.filter(
-            (f) => f.type !== "text" || (data[f.id] && String(data[f.id]).trim()),
-          );
-          return (
-            <View key={section.id} style={styles.section} wrap={false}>
-              <View style={styles.sectionHead}>
-                <Text style={styles.sectionTitle}>{section.title}</Text>
-                {sectionResult?.percent !== null ? (
-                  <Text style={styles.sectionPercent}>{sectionResult?.percent}%</Text>
-                ) : (
-                  <Text />
-                )}
-              </View>
-              {visibleFields.map((field) => (
-                <View key={field.id} style={styles.row}>
-                  <Text style={styles.rowLabel}>{field.label}</Text>
-                  <Text style={styles.rowValue}>
-                    {displayValue(field, data[field.id])}
+        <Text style={styles.sectionTitle}>Subjects</Text>
+        {subjects.length === 0 ? (
+          <Text style={styles.empty}>No subjects assigned to this student.</Text>
+        ) : (
+          subjects.map((s) => {
+            const mark = data[markFieldId(s.id)];
+            const remark = data[remarksFieldId(s.id)];
+            return (
+              <View key={s.id} style={styles.subjectRow} wrap={false}>
+                <View style={styles.subjectHead}>
+                  <Text style={styles.subjectName}>
+                    {s.teacher ? `${s.name} — ${s.teacher}` : s.name}
                   </Text>
+                  <Text style={styles.subjectMark}>{markDisplay(mark)}</Text>
                 </View>
-              ))}
-            </View>
-          );
-        })}
+                {remark ? (
+                  <Text style={styles.remarkText}>{String(remark)}</Text>
+                ) : null}
+              </View>
+            );
+          })
+        )}
 
         <Text style={styles.footer} fixed>
-          Generated by Jameah Islamic Institute · {new Date().toLocaleDateString()}
+          Generated on {new Date().toLocaleDateString()} · Jameah Islamic Institute
         </Text>
       </Page>
     </Document>

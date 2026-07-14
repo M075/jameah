@@ -11,13 +11,11 @@ const YEARS = [1, 2, 3, 4, 5, 6];
 
 export default function StudentDetailsForm({
   studentId,
-  studentCode,
   name,
   year,
   programme,
 }: {
   studentId: string;
-  studentCode: string;
   name: string;
   year: number | null;
   programme: string;
@@ -31,15 +29,6 @@ export default function StudentDetailsForm({
   return (
     <form action={formAction} className="mt-4 grid gap-4 sm:grid-cols-2">
       <input type="hidden" name="studentId" value={studentId} />
-      <div className="sm:col-span-2">
-        <label className={label}>Student code</label>
-        <input
-          name="studentCode"
-          defaultValue={studentCode}
-          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-          placeholder="auto-generated if left blank"
-        />
-      </div>
       <div className="sm:col-span-2">
         <label className={label}>
           Name <span className="text-red-500">*</span>
@@ -87,6 +76,19 @@ export default function StudentDetailsForm({
           </select>
         </div>
       ) : null}
+
+      <div className="sm:col-span-2">
+        <label className={label}>Set new password (optional)</label>
+        <input
+          type="password"
+          name="password"
+          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          placeholder="Leave blank to keep the current password"
+        />
+        <p className="mt-1 text-xs text-gray-500">
+          Minimum 8 characters. Only applies if this student has a login account.
+        </p>
+      </div>
 
       {state.errors ? (
         <ul className="sm:col-span-2 space-y-1 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">

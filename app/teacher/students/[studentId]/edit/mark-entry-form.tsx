@@ -1,46 +1,101 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { saveReport, type SaveResult } from "@/app/teacher/actions";
-import { computeResult, type ReportData, type ReportTemplate } from "@/lib/reports";
+import {
+  buildReportTemplate,
+  computeResult,
+  markFieldId,
+  remarksFieldId,
+  type ReportData,
+  type ReportTemplate,
+} from "@/lib/reports";
+import type { ProgrammeKey } from "@/lib/models";
+
+export interface SubjectInput {
+  id: string;
+  name: string;
+}
 
 interface Props {
-  template: ReportTemplate;
-  initialData: ReportData;
   studentId: string;
   termId: string;
-  subjectId: string;
+  programme: ProgrammeKey;
+  subjects: SubjectInput[];
+  initialData: ReportData;
+  /** Where to send the user after a successful save. */
+  returnUrl: string;
 }
 
 export default function MarkEntryForm({
-  template,
-  initialData,
   studentId,
   termId,
-  subjectId,
+  programme,
+  subjects,
+  initialData,
+  returnUrl,
 }: Props) {
-  const [data, setData] = useState<ReportData>(initialData ?? {});
+  const router = useRouter();
+  const [marks, setMarks] = useState<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const s of subjects) {
+      const v = initialData[markFieldId(s.id)];
+      m[s.id] = v === undefined || v === null ? "" : String(v);
+    }
+    return m;
+  });
+  const [remarks, setRemarks] = useState<Record<string, string>>(() => {
+    const r: Record<string, string> = {};
+    for (const s of subjects) {
+      const v = initialData[remarksFieldId(s.id)];
+      r[s.id] = typeof v === "string" ? v : "";
+    }
+    return r;
+  });
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<SaveResult | null>(null);
 
-  const preview = computeResult(template, data);
+  const template: ReportTemplate = buildReportTemplate(programme, subjects);
 
-  function setField(id: string, value: string | number) {
-    setData((prev) => ({ ...prev, [id]: value }));
+  // Build the live preview from the current state.
+  const previewData: ReportData = {};
+  for (const s of subjects) {
+    const mk = marks[s.id] ?? "";
+    previewData[markFieldId(s.id)] = mk === "" ? "" : Number(mk);
+    previewData[remarksFieldId(s.id)] = remarks[s.id] ?? "";
+  }
+  const preview = computeResult(template, previewData);
+
+  function setMark(id: string, value: string) {
+    setMarks((prev) => ({ ...prev, [id]: value }));
+    setResult(null);
+  }
+  function setRemark(id: string, value: string) {
+    setRemarks((prev) => ({ ...prev, [id]: value }));
     setResult(null);
   }
 
-  async function handleSave(status: "draft" | "published") {
+  async function handleSave() {
     setPending(true);
     setResult(null);
     try {
+      const payload: ReportData = {};
+      for (const s of subjects) {
+        const mk = marks[s.id] ?? "";
+        payload[markFieldId(s.id)] = mk === "" ? "" : Number(mk);
+        payload[remarksFieldId(s.id)] = remarks[s.id] ?? "";
+      }
       const res = await saveReport({
         studentId,
         termId,
-        subjectId,
-        status,
-        data,
+        status: "published",
+        data: payload,
       });
+      if (res.ok) {
+        router.push(returnUrl);
+        return;
+      }
       setResult(res);
     } catch {
       setResult({ ok: false, errors: ["Something went wrong. Please retry."] });
@@ -49,75 +104,50 @@ export default function MarkEntryForm({
     }
   }
 
+  if (subjects.length === 0) {
+    return (
+      <p className="rounded-lg bg-gray-50 px-4 py-6 text-center text-sm text-gray-400">
+        This student has no subjects assigned.
+      </p>
+    );
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
-      <div className="space-y-6">
-        {template.sections.map((section) => (
-          <section
-            key={section.id}
+      <div className="space-y-4">
+        {subjects.map((s) => (
+          <div
+            key={s.id}
             className="rounded-xl border border-gray-200 bg-white p-4"
           >
-            <h3 className="mb-3 font-semibold text-gray-800">
-              {section.title}
-            </h3>
-            <div className="space-y-4">
-              {section.fields.map((field) => (
-                <div key={field.id}>
-                  <label className="block text-sm font-medium text-gray-700">
-                    {field.label}
-                    {field.type === "score" && field.max ? (
-                      <span className="ml-1 text-xs font-normal text-gray-400">
-                        / {field.max}
-                      </span>
-                    ) : null}
-                  </label>
-                  {field.hint ? (
-                    <p className="mb-1 text-xs text-gray-400">{field.hint}</p>
-                  ) : null}
-
-                  {field.type === "score" ? (
-                    <input
-                      type="number"
-                      min={0}
-                      max={field.max ?? undefined}
-                      value={
-                        data[field.id] === undefined ? "" : String(data[field.id])
-                      }
-                      onChange={(e) =>
-                        setField(
-                          field.id,
-                          e.target.value === ""
-                            ? ""
-                            : Number(e.target.value),
-                        )
-                      }
-                      className="w-32 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                    />
-                  ) : field.type === "grade" ? (
-                    <select
-                      value={String(data[field.id] ?? "")}
-                      onChange={(e) => setField(field.id, e.target.value)}
-                      className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                    >
-                      <option value="">— select —</option>
-                      {field.options?.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <textarea
-                      rows={3}
-                      value={String(data[field.id] ?? "")}
-                      onChange={(e) => setField(field.id, e.target.value)}
-                      className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                    />
-                  )}
-                </div>
-              ))}
+            <div className="flex items-start justify-between gap-4">
+              <label
+                htmlFor={`mark-${s.id}`}
+                className="font-medium text-emerald-900"
+              >
+                {s.name}
+              </label>
+              <div className="flex items-center gap-1">
+                <input
+                  id={`mark-${s.id}`}
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={marks[s.id] ?? ""}
+                  onChange={(e) => setMark(s.id, e.target.value)}
+                  className="w-24 rounded-md border border-gray-300 px-2 py-1.5 text-right text-sm"
+                />
+                <span className="text-sm text-gray-400">/ 100</span>
+              </div>
             </div>
-          </section>
+            <textarea
+              rows={2}
+              placeholder="Teacher's remark"
+              value={remarks[s.id] ?? ""}
+              onChange={(e) => setRemark(s.id, e.target.value)}
+              className="mt-2 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </div>
         ))}
       </div>
 
@@ -130,16 +160,9 @@ export default function MarkEntryForm({
           <div className="mt-1 text-3xl font-semibold text-emerald-800">
             {preview.percent === null ? "—" : `${preview.percent}%`}
           </div>
-          <div className="text-sm text-gray-500">
-            Grade {preview.grade}
-          </div>
+          <div className="text-sm text-gray-500">Grade {preview.grade}</div>
         </div>
 
-        {result?.ok ? (
-          <div className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            Saved as <strong>{result.status}</strong>.
-          </div>
-        ) : null}
         {result && !result.ok && result.errors ? (
           <ul className="space-y-1 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
             {result.errors.map((e, i) => (
@@ -152,18 +175,10 @@ export default function MarkEntryForm({
           <button
             type="button"
             disabled={pending}
-            onClick={() => handleSave("draft")}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-60"
-          >
-            {pending ? "Saving…" : "Save as draft"}
-          </button>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => handleSave("published")}
+            onClick={handleSave}
             className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-60"
           >
-            {pending ? "Publishing…" : "Publish"}
+            {pending ? "Publishing…" : "Publish marks"}
           </button>
         </div>
       </aside>

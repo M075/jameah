@@ -6,6 +6,8 @@ import {
   TermModel,
   ReportModel,
   type StudentType,
+  type TermType,
+  type ReportType,
 } from "@/lib/models";
 import { getRequestContext } from "@/lib/auth/context";
 
@@ -23,25 +25,27 @@ export default async function StudentReportsPage({
     .lean<StudentType>();
   if (!student) notFound();
 
-  if (!isAdmin && teacher && !(student.subjects ?? []).some((s) => String(s.teacher) === String(teacher._id))) {
+  if (
+    !isAdmin &&
+    teacher &&
+    !(student.subjects ?? []).some((s) => String(s.teacher) === String(teacher._id))
+  ) {
     notFound();
   }
 
-  const terms = await TermModel.find().sort({ startDate: -1 }).lean();
+  const terms = await TermModel.find().sort({ startDate: -1 }).lean<TermType[]>();
   const activeTerm = terms.find((t) => t.active) ?? terms[0];
 
-  // Subjects this teacher is responsible for on this student.
-  const mySubjects = (student.subjects ?? []).filter((s) =>
-    isAdmin || (teacher && String(s.teacher) === String(teacher._id)),
+  const reports = await ReportModel.find({ student: student._id })
+    .populate("term")
+    .lean<ReportType[]>();
+  const reportByTerm = new Map(
+    reports.map((r) => [String(r.term), r]),
   );
 
-  const reports = await ReportModel.find({ student: student._id }).lean();
-  const statusOf = (subjectId: string, termId: string) =>
-    reports.find(
-      (r) =>
-        String(r.subject) === subjectId &&
-        String(r.term) === termId,
-    )?.status;
+  const canEdit = isAdmin || (student.subjects ?? []).some((s) =>
+    isAdmin || (teacher && String(s.teacher) === String(teacher._id)),
+  );
 
   return (
     <div>
@@ -55,8 +59,7 @@ export default async function StudentReportsPage({
         {student.name}
       </h1>
       <p className="text-sm text-gray-600">
-        {student.studentCode}
-        {student.grade ? ` · ${student.grade}` : ""}
+        {student.grade ? student.grade : ""}
       </p>
 
       {!activeTerm ? (
@@ -67,53 +70,66 @@ export default async function StudentReportsPage({
       ) : (
         <section className="mt-8">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-            Subjects you teach · {activeTerm.name} {activeTerm.academicYear}
+            Term reports
           </h2>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {mySubjects.map((entry) => {
-              const subj = entry.subject as unknown as {
-                _id: string;
-                name: string;
-              };
-              const status = statusOf(
-                String(subj._id),
-                String(activeTerm._id),
-              );
+          <div className="mt-3 space-y-3">
+            {terms.map((term) => {
+              const report = reportByTerm.get(String(term._id));
+              const isActive = activeTerm && String(term._id) === String(activeTerm._id);
+              const isPublished = report?.status === "published";
               return (
-                <Link
-                  key={String(subj._id)}
-                  href={`/teacher/students/${studentId}/edit?term=${String(
-                    activeTerm._id,
-                  )}&subject=${String(subj._id)}`}
-                  className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:border-emerald-400"
+                <div
+                  key={String(term._id)}
+                  className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
                 >
                   <div>
                     <div className="font-medium text-emerald-800">
-                      {subj.name}
+                      {term.name} {term.academicYear}
                     </div>
+                    {isActive ? (
+                      <div className="text-xs text-emerald-600">Active term</div>
+                    ) : null}
+                    {report ? (
+                      <span
+                        className={
+                          isPublished
+                            ? "mt-1 inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800"
+                            : "mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+                        }
+                      >
+                        {report.status}
+                      </span>
+                    ) : (
+                      <span className="mt-1 inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+                        not started
+                      </span>
+                    )}
                   </div>
-                  {status ? (
-                    <span
-                      className={
-                        status === "published"
-                          ? "rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800"
-                          : "rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800"
-                      }
-                    >
-                      {status}
-                    </span>
-                  ) : (
-                    <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-500">
-                      not started
-                    </span>
-                  )}
-                </Link>
+                  <div className="flex items-center gap-2">
+                    {report ? (
+                      <Link
+                        href={`/student/reports/${String(report._id)}`}
+                        className="rounded-md border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                      >
+                        View
+                      </Link>
+                    ) : null}
+                    {canEdit ? (
+                      <Link
+                        href={`/teacher/students/${studentId}/edit?term=${String(
+                          term._id,
+                        )}`}
+                        className="rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800"
+                      >
+                        {report ? "Edit marks" : "Enter marks"}
+                      </Link>
+                    ) : null}
+                  </div>
+                </div>
               );
             })}
-            {mySubjects.length === 0 ? (
-              <p className="text-sm text-gray-400">
-                No subjects are assigned to you for this student.
-              </p>
+            {terms.length === 0 ? (
+              <p className="text-sm text-gray-400">No terms available.</p>
             ) : null}
           </div>
         </section>

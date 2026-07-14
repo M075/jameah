@@ -31,19 +31,6 @@ export interface AdminActionState {
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
-/** Generate a unique sequential student code, e.g. "S-0102". */
-async function generateStudentCode(): Promise<string> {
-  const count = await StudentModel.countDocuments();
-  let n = count + 1;
-  for (;;) {
-    const candidate = `S-${String(n).padStart(4, "0")}`;
-    if (!(await StudentModel.findOne({ studentCode: candidate }))) {
-      return candidate;
-    }
-    n += 1;
-  }
-}
-
 /** Resolve the public origin (scheme + host) so magic-link emails point here. */
 async function getOrigin(): Promise<string> {
   const h = await headers();
@@ -367,10 +354,17 @@ async function upsertTeacher(
           return { errors: [`A user with email ${lower} already exists.`] };
         }
       }
-      await UserModel.findByIdAndUpdate(existingUser._id, {
+      const patch: { name: string; email: string; passwordHash?: string } = {
         name,
         email: lower,
-      });
+      };
+      if (password) {
+        if (password.length < 8) {
+          return { errors: ["Password must be at least 8 characters."] };
+        }
+        patch.passwordHash = await bcrypt.hash(password, 10);
+      }
+      await UserModel.findByIdAndUpdate(existingUser._id, patch);
     } else {
       if (await UserModel.findOne({ email: lower })) {
         return { errors: [`A user with email ${lower} already exists.`] };
@@ -435,7 +429,6 @@ export async function createStudent(
 
   const parsed = z
     .object({
-      studentCode: z.string().trim().optional().default(""),
       name: z.string().trim().min(1, "Name is required."),
       year: z.string().trim().optional().default(""),
       programme: z.string().trim().optional().default(""),
@@ -470,20 +463,9 @@ export async function createStudent(
 
   await connectDB();
 
-  // Resolve the code: validate uniqueness if provided, else auto-generate.
-  let studentCode = d.studentCode;
-  if (studentCode) {
-    if (await StudentModel.findOne({ studentCode })) {
-      return { errors: [`Student code "${studentCode}" already exists.`] };
-    }
-  } else {
-    studentCode = await generateStudentCode();
-  }
-
   const grade =
     d.programme === "aalim" && yearValid ? `Year ${yearNum}` : "";
   const student = await StudentModel.create({
-    studentCode,
     name: d.name,
     grade,
     programme: d.programme,
@@ -548,10 +530,10 @@ export async function updateStudent(
   const parsed = z
     .object({
       studentId: z.string().min(1, "Missing student id."),
-      studentCode: z.string().trim().optional().default(""),
       name: z.string().trim().min(1, "Name is required."),
       year: z.string().trim().optional().default(""),
       programme: z.string().trim().optional().default(""),
+      password: z.string().optional().default(""),
     })
     .safeParse(Object.fromEntries(formData));
 
@@ -578,22 +560,11 @@ export async function updateStudent(
 
   await connectDB();
 
-  if (d.studentCode) {
-    const clash = await StudentModel.findOne({
-      studentCode: d.studentCode,
-      _id: { $ne: d.studentId },
-    });
-    if (clash) {
-      return { errors: [`Student code "${d.studentCode}" is already in use.`] };
-    }
-  }
-
   const grade =
     d.programme === "aalim" && yearValid ? `Year ${yearNum}` : "";
   const student = await StudentModel.findByIdAndUpdate(
     d.studentId,
     {
-      studentCode: d.studentCode || undefined,
       name: d.name,
       grade,
       year: d.programme === "aalim" && yearValid ? (yearNum as number) : null,
@@ -602,6 +573,23 @@ export async function updateStudent(
     { new: true },
   );
   if (!student) return { errors: ["Student not found."] };
+
+  // Optionally (re)set the linked login's password.
+  if (d.password) {
+    if (d.password.length < 8) {
+      return { errors: ["Password must be at least 8 characters."] };
+    }
+    if (!student.userId) {
+      return {
+        errors: [
+          "This student has no login account yet. Create one from the students list first.",
+        ],
+      };
+    }
+    await UserModel.findByIdAndUpdate(student.userId, {
+      passwordHash: await bcrypt.hash(d.password, 10),
+    });
+  }
 
   // Recompute subject assignments (e.g. when the year changes).
   await assignSubjectsForYear(d.studentId);

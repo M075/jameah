@@ -22,15 +22,6 @@ export default function StudentForm() {
   return (
     <form action={formAction} className="max-w-lg space-y-4">
       <div>
-        <label className={label}>Student code</label>
-        <input
-          name="studentCode"
-          className={field}
-          placeholder="auto-generated if left blank (e.g. S-0102)"
-        />
-      </div>
-
-      <div>
         <label className={label}>
           Name <span className="text-red-500">*</span>
         </label>
