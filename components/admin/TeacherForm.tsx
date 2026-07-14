@@ -14,12 +14,12 @@ const label = "block text-sm font-medium text-gray-700";
 export default function TeacherForm({
   id,
   name = "",
-  type: initialType = "Aalim",
+  type: initialType = "aalim",
   email = "",
 }: {
   id?: string;
   name?: string;
-  type?: "Hifz" | "Aalim";
+  type?: "hifz" | "aalim";
   email?: string;
 }) {
   const action = id ? updateTeacher : createTeacher;
@@ -27,7 +27,7 @@ export default function TeacherForm({
     AdminActionState,
     FormData
   >(action, {});
-  const [type, setType] = useState<"Hifz" | "Aalim">(initialType);
+  const [type, setType] = useState<"hifz" | "aalim">(initialType);
   const [createLogin, setCreateLogin] = useState<boolean>(Boolean(email));
   // Default to "password" so the password field is visible out of the box — the
   // user can switch to a magic link if they prefer. This avoids the case where
@@ -60,11 +60,11 @@ export default function TeacherForm({
         <select
           name="type"
           value={type}
-          onChange={(e) => setType(e.target.value as "Hifz" | "Aalim")}
+          onChange={(e) => setType(e.target.value as "hifz" | "aalim")}
           className={field}
         >
-          <option value="Hifz">Hifz</option>
-          <option value="Aalim">Aalim</option>
+          <option value="hifz">hifz</option>
+          <option value="aalim">aalim</option>
         </select>
       </div>
 
