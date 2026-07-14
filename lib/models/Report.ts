@@ -18,7 +18,7 @@ const reportSchema = new Schema(
     teacher: {
       type: Schema.Types.ObjectId,
       ref: "Teacher",
-      required: true,
+      default: null,
     },
     term: { type: Schema.Types.ObjectId, ref: "Term", required: true },
     // The subject this report covers (replaces the old template field).
