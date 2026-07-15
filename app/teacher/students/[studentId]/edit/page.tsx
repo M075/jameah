@@ -107,7 +107,7 @@ export default async function EditReportPage({
           programme={student.programme}
           subjects={editable}
           initialData={initialData}
-          returnUrl={`/teacher/students/${studentId}`}
+          returnUrl="/teacher"
         />
       </div>
     </div>

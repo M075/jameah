@@ -117,7 +117,7 @@ export default async function StudentReportsPage({
                     {canEdit ? (
                       <Link
                         href={`/teacher/students/${studentId}/edit?term=${String(
-                          term._id,
+                          (activeTerm ?? term)._id,
                         )}`}
                         className="rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800"
                       >

@@ -1,7 +1,30 @@
 import Link from "next/link";
 import { connectDB } from "@/lib/db";
-import { StudentModel, TermModel } from "@/lib/models";
+import { StudentModel, TermModel, ReportModel } from "@/lib/models";
 import { getRequestContext } from "@/lib/auth/context";
+
+/** Marks-entry status badge for the active term. */
+function StatusBadge({ status }: { status?: string }) {
+  if (!status) {
+    return (
+      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+        Not started
+      </span>
+    );
+  }
+  const published = status === "published";
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+        published
+          ? "bg-emerald-100 text-emerald-800"
+          : "bg-amber-100 text-amber-800"
+      }`}
+    >
+      {published ? "Published" : "Draft"}
+    </span>
+  );
+}
 
 export default async function TeacherDashboard() {
   const { teacher, isAdmin } = await getRequestContext();
@@ -14,6 +37,17 @@ export default async function TeacherDashboard() {
 
   const terms = await TermModel.find().sort({ startDate: -1 }).lean();
   const activeTerm = terms.find((t) => t.active) ?? terms[0];
+
+  // Marks-entry status for the active term (or most recent), shown per student.
+  const reports = activeTerm
+    ? await ReportModel.find({
+        term: activeTerm._id,
+        student: { $in: students.map((s) => s._id) },
+      }).lean()
+    : [];
+  const statusByStudent = new Map<string, string>(
+    reports.map((r) => [String(r.student), r.status]),
+  );
 
   return (
     <div>
@@ -28,7 +62,8 @@ export default async function TeacherDashboard() {
           <thead className="bg-gray-50 text-left text-gray-500">
             <tr>
               <th className="px-4 py-2 font-medium">Name</th>
-              <th className="px-4 py-2 font-medium">Grade</th>
+              <th className="px-4 py-2 font-medium">Class</th>
+              <th className="px-4 py-2 font-medium">Marks</th>
               <th className="px-4 py-2 font-medium text-right">Action</th>
             </tr>
           </thead>
@@ -39,9 +74,14 @@ export default async function TeacherDashboard() {
                   {s.name}
                 </td>
                 <td className="px-4 py-2 text-gray-600">{s.grade}</td>
+                <td className="px-4 py-2">
+                  <StatusBadge status={statusByStudent.get(String(s._id))} />
+                </td>
                 <td className="px-4 py-2 text-right">
                   <Link
-                    href={`/teacher/students/${String(s._id)}`}
+                    href={`/teacher/students/${String(
+                      s._id,
+                    )}/edit?term=${String((activeTerm ?? terms[0])?._id)}`}
                     className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-800"
                   >
                     Enter marks
@@ -52,7 +92,7 @@ export default async function TeacherDashboard() {
             {students.length === 0 ? (
               <tr>
                 <td
-                  colSpan={3}
+                  colSpan={4}
                   className="px-4 py-6 text-center text-gray-400"
                 >
                   No students assigned yet.

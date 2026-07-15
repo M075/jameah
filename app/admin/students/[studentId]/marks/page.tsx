@@ -111,7 +111,7 @@ export default async function AdminMarksPage({
           programme={student.programme}
           subjects={subjects}
           initialData={initialData}
-          returnUrl={`/admin/students/${studentId}`}
+          returnUrl="/admin/students"
         />
       </div>
     </div>

@@ -1,14 +1,50 @@
 import Link from "next/link";
 import { connectDB } from "@/lib/db";
-import { StudentModel } from "@/lib/models";
+import { StudentModel, TermModel, ReportModel } from "@/lib/models";
 import { getRequestContext } from "@/lib/auth/context";
 import { deleteStudent } from "@/app/admin/actions";
+
+/** Marks-entry status badge for the active term. */
+function StatusBadge({ status }: { status?: string }) {
+  if (!status) {
+    return (
+      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+        Not started
+      </span>
+    );
+  }
+  const published = status === "published";
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+        published
+          ? "bg-emerald-100 text-emerald-800"
+          : "bg-amber-100 text-amber-800"
+      }`}
+    >
+      {published ? "Published" : "Draft"}
+    </span>
+  );
+}
 
 export default async function AdminStudentsPage() {
   await getRequestContext();
   await connectDB();
 
   const students = await StudentModel.find().sort({ name: 1 }).lean();
+
+  // Marks-entry status for the active term (or most recent), shown per student.
+  const terms = await TermModel.find().sort({ startDate: -1 }).lean();
+  const activeTerm = terms.find((t) => t.active) ?? terms[0];
+  const reports = activeTerm
+    ? await ReportModel.find({
+        term: activeTerm._id,
+        student: { $in: students.map((s) => s._id) },
+      }).lean()
+    : [];
+  const statusByStudent = new Map<string, string>(
+    reports.map((r) => [String(r.student), r.status]),
+  );
 
   return (
     <div>
@@ -33,7 +69,8 @@ export default async function AdminStudentsPage() {
           <thead className="bg-gray-50 text-left text-gray-500">
             <tr>
               <th className="px-4 py-2 font-medium">Name</th>
-              <th className="px-4 py-2 font-medium">Grade</th>
+              <th className="px-4 py-2 font-medium">Class</th>
+              <th className="px-4 py-2 font-medium">Marks</th>
               <th className="px-4 py-2 font-medium">Programme</th>
               <th className="px-4 py-2 font-medium text-right">Action</th>
             </tr>
@@ -45,6 +82,9 @@ export default async function AdminStudentsPage() {
                   {s.name}
                 </td>
                 <td className="px-4 py-2 text-gray-600">{s.grade}</td>
+                <td className="px-4 py-2">
+                  <StatusBadge status={statusByStudent.get(String(s._id))} />
+                </td>
                 <td className="px-4 py-2 text-gray-600">
                   {s.programme ? (
                     <span
