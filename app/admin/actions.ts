@@ -14,6 +14,9 @@ import {
   SubjectModel,
   ReportModel,
   TermModel,
+  SettingModel,
+  getSettings,
+  SETTINGS_ID,
   PROGRAMMES,
   type Role,
   type ProgrammeKey,
@@ -776,5 +779,49 @@ export async function setActiveTerm(formData: FormData): Promise<void> {
   await TermModel.findByIdAndUpdate(id, { active: true });
   revalidatePath("/admin/terms");
   redirect("/admin/terms");
+}
+
+/* --------------------------------------------------------------------------
+ * Settings — principal's signature (shown on every report)
+ * ------------------------------------------------------------------------ */
+
+const DATA_URL_RE = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+
+/**
+ * Persist the principal's signature as a data: URL on the singleton settings
+ * doc. `signature` must be a valid image data URL (PNG/JPEG/WebP/GIF). Empty
+ * string clears the signature.
+ */
+export async function saveSignature(
+  _prev: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  const { isAdmin } = await getRequestContext();
+  if (!isAdmin) return { errors: ["Not authorised."] };
+
+  const signature = String(formData.get("signature") ?? "").trim();
+
+  if (signature && !DATA_URL_RE.test(signature)) {
+    return {
+      errors: [
+        "Invalid signature image. Upload a PNG, JPEG, WebP or GIF (max 2 MB).",
+      ],
+    };
+  }
+  // Guard against oversized payloads (base64 ~1.33x the raw bytes).
+  if (signature && signature.length > 2.8 * 1024 * 1024) {
+    return { errors: ["Signature image is too large (max 2 MB)."] };
+  }
+
+  await connectDB();
+  await SettingModel.findByIdAndUpdate(
+    SETTINGS_ID,
+    { signatureDataUrl: signature },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
+  revalidatePath("/admin/settings");
+  revalidatePath("/student/reports/[reportId]");
+  revalidatePath("/api/reports/[reportId]/pdf");
+  return { ok: true };
 }
 

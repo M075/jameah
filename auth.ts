@@ -46,6 +46,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const { UserModel } = await import("@/lib/models");
 
         await connectDB();
+        // Create the .env admin on demand if it doesn't exist yet. Loaded
+        // lazily (dynamic import) so mongoose is NOT pulled into the edge
+        // middleware that imports this module.
+        const { bootstrapAdminFromEnv } = await import(
+          "@/lib/settings/bootstrap"
+        );
+        await bootstrapAdminFromEnv();
         const user = await UserModel.findOne({ email })
           .select("+passwordHash")
           .lean();

@@ -12,6 +12,7 @@ const NAV: Record<string, SidebarNavItem[]> = {
     { href: "/admin/terms", label: "Terms", icon: "terms" },
     { href: "/admin/reports", label: "Reports", icon: "reports" },
     { href: "/admin/backup", label: "Backup", icon: "backup" },
+    { href: "/admin/settings", label: "Settings", icon: "settings" },
   ],
 };
 

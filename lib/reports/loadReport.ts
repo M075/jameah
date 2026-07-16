@@ -4,6 +4,7 @@ import {
   StudentModel,
   TermModel,
   TeacherModel,
+  getSettings,
   type ReportType,
   type StudentType,
   type TermType,
@@ -38,6 +39,8 @@ export interface ReportContext {
   template: ReportTemplate;
   result: ReportResult;
   data: ReportData;
+  /** Data-URL of the principal's signature (empty string when none set). */
+  signature?: string;
 }
 
 /**
@@ -103,6 +106,7 @@ export async function loadReportContext(
   const template = buildReportTemplate(programme, subjectRefs);
   const data = (report.data ?? {}) as ReportData;
   const result = computeResult(template, data);
+  const settings = await getSettings();
 
   return {
     report,
@@ -114,5 +118,6 @@ export async function loadReportContext(
     template,
     result,
     data,
+    signature: settings.signatureDataUrl || undefined,
   };
 }

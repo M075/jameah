@@ -19,3 +19,9 @@ export {
   type SubjectType,
   type ProgrammeKey,
 } from "./Subject";
+export {
+  SettingModel,
+  getSettings,
+  SETTINGS_ID,
+  type SettingType,
+} from "./Setting";

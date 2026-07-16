@@ -3,6 +3,7 @@ import {
   Page,
   View,
   Text,
+  Image,
   StyleSheet,
 } from "@react-pdf/renderer";
 import type { ReportContext } from "@/lib/reports/loadReport";
@@ -53,14 +54,25 @@ const styles = StyleSheet.create({
     left: 36,
     right: 36,
     borderTop: "1pt solid #e5e7eb",
-    paddingTop: 4,
+    paddingTop: 6,
     fontSize: 8,
     color: "#9ca3af",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
   },
+  signatureLabel: {
+    fontSize: 7,
+    color: "#9ca3af",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
+  signatureImage: { height: 36, width: 140, objectFit: "contain" },
 });
 
 export default function ReportPdf({ ctx }: { ctx: ReportContext }) {
-  const { student, term, template, result, data, subjects } = ctx;
+  const { student, term, template, result, data, subjects, signature } = ctx;
 
   return (
     <Document>
@@ -119,9 +131,26 @@ export default function ReportPdf({ ctx }: { ctx: ReportContext }) {
           })
         )}
 
-        <Text style={styles.footer} fixed>
-          Generated on {new Date().toLocaleDateString()} · Jameah Islamic Institute
-        </Text>
+        <View style={styles.footer} fixed>
+          <View>
+            <Text style={styles.signatureLabel}>Principal&apos;s signature</Text>
+            {signature ? (
+              <Image style={styles.signatureImage} src={signature} />
+            ) : (
+              <View
+                style={{
+                  height: 28,
+                  width: 140,
+                  borderBottom: "1pt solid #9ca3af",
+                }}
+              />
+            )}
+          </View>
+          <Text>
+            Generated on {new Date().toLocaleDateString()} · Jameah Islamic
+            Institute
+          </Text>
+        </View>
       </Page>
     </Document>
   );

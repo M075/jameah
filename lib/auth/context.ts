@@ -2,6 +2,7 @@ import type { Session } from "next-auth";
 import { auth } from "@/auth";
 import { connectDB } from "@/lib/db";
 import { TeacherModel, type TeacherType } from "@/lib/models";
+import { bootstrapAdminFromEnv } from "@/lib/settings/bootstrap";
 
 export interface RequestContext {
   session: Session | null;
@@ -19,6 +20,9 @@ export async function getRequestContext(): Promise<RequestContext> {
   if (!session?.user) {
     return { session: null, teacher: null, isAdmin: false };
   }
+
+  // Lazily create an admin from .env on the first authenticated request.
+  await bootstrapAdminFromEnv();
 
   await connectDB();
 

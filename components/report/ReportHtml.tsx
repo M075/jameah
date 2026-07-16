@@ -7,7 +7,7 @@ function markDisplay(value: unknown): string {
 }
 
 export default function ReportHtml({ ctx }: { ctx: ReportContext }) {
-  const { student, term, template, result, data, subjects } = ctx;
+  const { student, term, template, result, data, subjects, signature } = ctx;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-8 print:border-0 print:p-0">
@@ -84,7 +84,26 @@ export default function ReportHtml({ ctx }: { ctx: ReportContext }) {
       </div>
 
       <footer className="mt-8 border-t border-gray-200 pt-3 text-xs text-gray-400">
-        Generated on {new Date().toLocaleDateString()} · Jameah Islamic Institute
+        <div className="flex items-end justify-between gap-6">
+          <div>
+            <div className="mb-1 text-[10px] uppercase tracking-wide text-gray-400">
+              Principal&apos;s signature
+            </div>
+            {signature ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={signature}
+                alt="Principal's signature"
+                className="h-14 max-w-[180px] object-contain"
+              />
+            ) : (
+              <div className="h-14 w-44 border-b border-gray-300" />
+            )}
+          </div>
+          <div className="shrink-0 text-right">
+            Generated on {new Date().toLocaleDateString()} · Jameah Mahmoodiyah
+          </div>
+        </div>
       </footer>
     </div>
   );
